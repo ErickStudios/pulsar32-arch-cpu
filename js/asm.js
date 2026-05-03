@@ -1,4 +1,4 @@
-class Context {
+export class Context {
     constructor() {
         this.symbols = new Map();
         this.codelen = 0;
@@ -6,7 +6,7 @@ class Context {
         this.result = [];
     }
 }
-function tokenize(code) {
+export function tokenize(code) {
   const tokens = [];
   let i = 0;
   const isLetter = (c) => /[a-zA-Z_]/.test(c);
@@ -55,7 +55,7 @@ function tokenize(code) {
   }
   return tokens;
 }
-function toBigEndianBytes(n, x) {
+export function toBigEndianBytes(n, x) {
     let bytes = [];
     while (n > 0) {
         bytes.push(n & 0xFF);
@@ -67,8 +67,7 @@ function toBigEndianBytes(n, x) {
     }
     return bytes;
 }
-/** @param {Context} ctx  */
-function AssembleLineWithoutContext(line, ctx) {
+export function AssembleLineWithoutContext(line, ctx) {
     let tokens = tokenize(line);
     let i = 0;
     let result = [];
@@ -182,7 +181,7 @@ function AssembleLineWithoutContext(line, ctx) {
     }
     return result;
 }
-function AssembleCode(code) {
+export function AssembleCode(code) {
     let lines = code.split('\n');
     let result = [];
     let context = new Context();
@@ -197,14 +196,3 @@ function AssembleCode(code) {
     })
     return {result, context};
 }
-console.log(AssembleCode(`
-    Assume-Org          0
-
-    _start:
-        Push-Word       256
-        Push-Word       256
-        Add-Word-Sp-Sp
-        Push-Word       Out
-    miVariable:
-        Assume-Word     0
-    `))

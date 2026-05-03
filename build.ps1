@@ -1,2 +1,2 @@
-iverilog -o cpu cpu.v tb.v
+iverilog -o cpu src/cpu.v tb.v
 vvp cpu
