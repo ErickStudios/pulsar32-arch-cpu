@@ -1,9 +1,9 @@
 Assume-Org          0
 
-_start:
-    Push-Word       256
-    Push-Word       256
-    Add-Word-Sp-Sp
-    Push-Word       Out
-miVariable:
-    Assume-Word     0
+_init:
+    Push-Byte       5
+    Push-Byte       5
+    Push-Byte       5
+
+_loopInit:
+    Jmp-Word-Clasic _loopInit

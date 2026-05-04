@@ -4,7 +4,7 @@ import * as fileSystem from "node:fs";
 
 let asmFile = argv[2];
 let outpudFile = argv[3];
-let asmFileContent = fileSystem.readFileSync(asmFile);
+let asmFileContent = fileSystem.readFileSync(asmFile, 'utf-8');
 let result = pulsarAsm.AssembleCode(asmFileContent).result;
 let hex = result.map(b => b.toString(16).padStart(2, '0')).join('\n');
 

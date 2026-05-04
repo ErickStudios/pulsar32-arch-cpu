@@ -32,8 +32,9 @@ always @(posedge clk) begin
         pc = 0;
         sp = 63000;
         ir = 0;
+        paused = 0;
     // tick of click
-    end else begin
+    end else if (!paused) begin
         // fetch instruction
         ir = memory[pc];                           // current instruction
         pc = pc + 1;                               // increment program counter
@@ -120,7 +121,77 @@ always @(posedge clk) begin
                 endcase
 
             end
+            // HLT = Halt main Tread
+            8'h05: begin 
+                paused = 1;
+            end
+            // CMP = Operation Propurse with Result
+            8'h06: begin
+                // fetch mode
+                OprOperationBytes = memory[pc]; // operation bytes len
+                operationModes = memory[pc + 1];    // operation mode
+                pc = pc + 2;                        // increment pc
 
+                $write("ANONYMUS");
+                if ((OprOperationBytes * 8) < 10)
+                    $write("%0d ", OprOperationBytes * 8);
+                else
+                    $write("%0d", OprOperationBytes * 8);
+                $write(" CMP ");
+
+                $write("%s ", castToDebug(operationModes[7:4]));
+                $write("%s\n", castToDebug(operationModes[3:0]));
+
+                a = operateInstant(operationModes[7:4],OprOperationBytes);
+                b = operateInstant(operationModes[3:0],OprOperationBytes);
+
+                result = a - b;
+                flags = 0;
+                if (result == 0)
+                    flags[0] = 1;
+                if (result[31] == 1)
+                    flags[1] = 1;
+                if (result > 0 && result[31] == 0)
+                    flags[2] = 1;
+                $display(flags);
+            end
+            // JMP = Operation Propurse with Result
+            8'h07: begin
+                // fetch mode
+                OprOperationBytes = memory[pc];     // operation bytes len
+                operationModes = memory[pc + 1];    // operation mode
+                mode = memory[pc + 2];              // jmp template
+                pc = pc + 3;                        // increment pc
+
+                $write("ANONYMUS");
+                if ((OprOperationBytes * 8) < 10)
+                    $write("%0d ", OprOperationBytes * 8);
+                else
+                    $write("%0d", OprOperationBytes * 8);
+                $write(" JMP ");
+
+                $write("%s ", castToDebug(operationModes[3:0]));
+
+                a = operateInstant(operationModes[7:4],OprOperationBytes);
+                $write("%d\n", a);
+                case (mode)
+                    // normal jmp 
+                    8'h00: pc = a;
+                    // if equal jmp
+                    8'h01: begin 
+                        if (flags[0]) pc = a;
+                    end
+                    // if less jmp
+                    8'h01: begin 
+                        if (flags[1]) pc = a;
+                    end
+                    // if greater jmp
+                    8'h01: begin 
+                        if (flags[2]) pc = a;
+                    end
+                endcase
+
+            end
         endcase
     end
 end

@@ -95,17 +95,17 @@ export function AssembleLineWithoutContext(line, ctx) {
         if (peek().type === 'identifier') {
             let ident = consume();
 
-            if (ident.value.toUpperCase() == 'OUT') {
+            if (ident.value.toUpperCase() === 'OUT') {
                 return ({type: 'symbol', value: 'cpu.registers.result'});
             }
-            if (ident.value.toUpperCase() == 'DX') {
+            if (ident.value.toUpperCase() === 'DX') {
                 return ({type: 'symbol', value: 'cpu.registers.data'});
             }
-            if (ident.value.toUpperCase() == 'PX') {
+            if (ident.value.toUpperCase() === 'PX') {
                 return ({type: 'symbol', value: 'cpu.registers.ptr'});
             }
             if (ctx.symbols.has(ident.value)) {
-                return ({type: 'inm', value: ctx.symbols.get(ident.value)});
+                return ({type: 'inm', value: ctx.symbols.get(ident.value) + ctx.orgIn});
             }
         }
     }
@@ -138,6 +138,22 @@ export function AssembleLineWithoutContext(line, ctx) {
         expect('-');
         let operand2 = operandParse(consume().value);
         result.push((operand1.bind << 4) | operand2.bind);
+        let casterA = (operand) => {
+            if (operand.type !== 'stack') {
+                let primary = parsePrimary();
+                if (primary.type === 'symbol' && operand.type === 'reg') {
+                    result.push(parseSymbol(primary.value));
+                    return true;
+                }
+                if (primary.type === 'inm' && operand.type === 'inm') {
+                    result.push(...toBigEndianBytes(primary.value, sizeof));
+                    return true;
+                }
+            }
+            return false;
+        }
+        if (casterA(operand1)) expect(',');
+        casterA(operand2);
     }
     while (i < tokens.length) {
         if (peek().value.toUpperCase() === 'PUSH') {
@@ -151,6 +167,73 @@ export function AssembleLineWithoutContext(line, ctx) {
             }
             else if (expr.type == 'symbol') {
                 result.push(1, sizeof, parseSymbol(expr.value))
+            }
+        }
+        else if (peek().value.toUpperCase() === 'HLT') {
+            consume();
+            result.push(5);
+        }
+        else if (peek().value.toUpperCase() === "CMP") {
+            consume();
+            result.push(6);
+            expect('-');
+            let sizeof = parseSize(consume().value);
+            result.push(sizeof);
+            expect('-');
+            let operand1 = operandParse(consume().value);
+            expect('-');
+            let operand2 = operandParse(consume().value);
+            result.push((operand1.bind << 4) | operand2.bind);
+
+            let casterA = (operand) => {
+                if (operand.type !== 'stack') {
+                    let primary = parsePrimary();
+                    if (primary.type === 'symbol' && operand.type === 'reg') {
+                        result.push(parseSymbol(primary.value));
+                        return true;
+                    }
+                    if (primary.type === 'inm' && operand.type === 'inm') {
+                        result.push(...toBigEndianBytes(primary.value, sizeof));
+                        return true;
+                    }
+                }
+                return false;
+            }
+            if (casterA(operand1)) expect(',');
+            casterA(operand2);
+        }
+        else if (peek().value.toUpperCase() === "JMP") {
+            consume();
+            result.push(7);
+            expect('-');
+            let sizeof = parseSize(consume().value);
+            result.push(sizeof);
+            expect('-');
+            let mode = consume().value;
+            let expr = parsePrimary();
+            if (expr.type === 'inm') {
+                result.push(0);
+            }
+            else if (expr.type == 'symbol') {
+                result.push(1)
+            }
+            if (mode.toUpperCase() === 'CLASIC') {
+                result.push(0);
+            }
+            else if (mode.toUpperCase() === 'ZERO') {
+                result.push(1);
+            }
+            else if (mode.toUpperCase() === 'LESS') {
+                result.push(2);
+            }
+            else if (mode.toUpperCase() === 'GREATER') {
+                result.push(3);
+            }
+            if (expr.type === 'inm') {
+                result.push(...toBigEndianBytes(expr.value, sizeof));
+            }
+            else if (expr.type == 'symbol') {
+                result.push(parseSymbol(expr.value))
             }
         }
         else if (peek().value.toUpperCase() === 'ADD') parseOperation(1);
