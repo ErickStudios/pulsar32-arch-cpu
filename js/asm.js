@@ -92,9 +92,9 @@ export function AssembleLineWithoutContext(line, ctx) {
   }
   function parsePrimary() {
     if (typeof peek().value === 'number') return ({ type: 'inm', value: consume().value });
+    let ident;
     if (peek().type === 'identifier') {
-      let ident = consume();
-
+      ident = consume();
       if (ident.value.toUpperCase() === 'OUT') {
         return ({ type: 'symbol', value: 'cpu.registers.result' });
       }
@@ -108,6 +108,11 @@ export function AssembleLineWithoutContext(line, ctx) {
         return ({ type: 'inm', value: ctx.symbols.get(ident.value) + ctx.orgIn });
       }
     }
+    if (ctx.symbols.has(ident.value)) {
+      return ({ type: 'inm', value: ctx.symbols.get(ident.value) + ctx.orgIn });
+    }
+    return ({ type: 'inm', value: 0 });
+
   }
   function parseSymbol(name) {
     if (name === 'cpu.registers.result') {
@@ -164,6 +169,19 @@ export function AssembleLineWithoutContext(line, ctx) {
       consume();
       expect('-');
       result.push(3);
+      let sizeof = parseSize(consume().value);
+      let expr = parsePrimary();
+      if (expr.type === 'inm') {
+        result.push(0, sizeof, ...toBigEndianBytes(expr.value, sizeof));
+      }
+      else if (expr.type == 'symbol') {
+        result.push(1, sizeof, parseSymbol(expr.value))
+      }
+    }
+    else if (peek().value.toUpperCase() === 'OUT') {
+      consume();
+      expect('-');
+      result.push(8);
       let sizeof = parseSize(consume().value);
       let expr = parsePrimary();
       if (expr.type === 'inm') {
@@ -254,6 +272,12 @@ export function AssembleLineWithoutContext(line, ctx) {
       }
     }
     else if (peek().value.toUpperCase() === 'ADD') parseOperation(1);
+    else if (peek().value.toUpperCase() === 'SUB') parseOperation(2);
+    else if (peek().value.toUpperCase() === 'MUL') parseOperation(3);
+    else if (peek().value.toUpperCase() === 'DIV') parseOperation(4);
+    else if (peek().value.toUpperCase() === 'AND') parseOperation(5);
+    else if (peek().value.toUpperCase() === 'OR') parseOperation(6);
+    else if (peek().value.toUpperCase() === 'XOR') parseOperation(7);
     else if (peek().value.toUpperCase() === 'ASSUME') {
       consume();
       expect('-');

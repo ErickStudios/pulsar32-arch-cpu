@@ -137,6 +137,9 @@ always @(posedge clk) begin
                     8'h02: result = a - b;
                     8'h03: result = a * b;
                     8'h04: result = a / b;
+                    8'h05: result = a & b;
+                    8'h06: result = a | b;
+                    8'h07: result = a ^ b;
                 endcase
 
             end
@@ -200,15 +203,33 @@ always @(posedge clk) begin
                         if (flags[0]) pc = a;
                     end
                     // if less jmp
-                    8'h01: begin 
+                    8'h02: begin 
                         if (flags[1]) pc = a;
                     end
                     // if greater jmp
-                    8'h01: begin 
+                    8'h03: begin 
                         if (flags[2]) pc = a;
                     end
                 endcase
 
+            end
+            // SDX = Save Data RegiXters to memory
+            8'h08: begin
+                mode = memory[pc];
+                OprOperationBytes = memory[pc + 1];
+                pc = pc + 2;
+
+                a = operateInstant(mode[7:4],OprOperationBytes);
+                $write("ANONYMUS");
+                if ((OprOperationBytes * 8) < 10)
+                    $write("%0d ", OprOperationBytes * 8);
+                else
+                    $write("%0d", OprOperationBytes * 8);
+                $write(" SDX %0d\n", a);
+
+                for (i = 0; i < OprOperationBytes; i = i + 1) begin
+                    memory[OprOperationBytes + OprOperationBytes - i] = a >> (8*i);
+                end
             end
         endcase
     end

@@ -13,13 +13,13 @@ _devices_vector:
         Assume-Dword down_button_irq 
 _init:
     Lea-Dword       _alphaBtn_vec_ptr
-    ;Write-Out-Dword alpha_button_irq
+    Out-Dword       alpha_button_irq
     Lea-Dword       _betaBtn_vec_ptr
-    ;Write-Out-Dword beta_button_irq
+    Out-Dword       beta_button_irq
     Lea-Dword       _upBtn_vec_ptr
-    ;Write-Out-Dword up_button_irq
+    Out-Dword       up_button_irq
     Lea-Dword       _downBtn_vec_ptr
-    ;Write-Out-Dword down_button_irq
+    Out-Dword       down_button_irq
 loop:
     Hlt
     Jmp-Word-Clasic loop
