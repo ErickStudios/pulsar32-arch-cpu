@@ -23,7 +23,7 @@ export function tokenize(code) {
       }
       continue;
     }
-    if (c === '"' || c === "'") {
+    if (c === "'") {
       let quoteType = c;
       let value = "";
       i++;
@@ -31,7 +31,7 @@ export function tokenize(code) {
         value += code[i++];
       }
       i++;
-      tokens.push({ type: "string", value });
+      tokens.push({ type: "number", value: value.charCodeAt(0) });
       continue;
     }
     if (isLetter(c)) {
@@ -103,6 +103,10 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
   }
   function parsePrimary() {
     if (typeof peek().value === 'number') return ({ type: 'inm', value: consume().value });
+    if (peek().value.toUpperCase() === 'SP') {
+      consume();
+      return ({ type: 'stack' });
+    }
     let ident;
     if (peek().type === 'identifier') {
       ident = consume();
@@ -214,6 +218,9 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
       else if (expr.type == 'symbol') {
         result.push(1, sizeof, parseSymbol(expr.value))
       }
+      else if (expr.type == 'stack') {
+        result.push(2, sizeof);
+      }
     }
     else if (peek().value.toUpperCase() === 'MOV') {
       consume();
@@ -269,7 +276,10 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
         result.push(0);
       }
       else if (expr.type == 'symbol') {
-        result.push(1)
+        result.push(1);
+      }
+      else if (expr.type == 'stack') {
+        result.push(2);
       }
       if (mode.toUpperCase() === 'CLASIC') {
         result.push(0);
@@ -307,12 +317,12 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
       }
       else if (parseSize(action.value.toUpperCase()) !== undefined) {
         let sizeof = parseSize(action.value.toUpperCase());
-        result.push(...toBigEndianBytes(parseIdent(consume().value), sizeof));
+        result.push(...toBigEndianBytes(parseIdent(parsePrimary().value), sizeof));
       }
       else if (action.value.toUpperCase() === "FILL") {
         let fillto = consume().value;
         let bytesfill = fillto - len;
-        result.push(...Array(bytesfill).fill(1));
+        result.push(...Array(bytesfill).fill(0));
       }
     }
     else if (peek().type === 'symbol' && peek().value === ';') break;

@@ -24,6 +24,9 @@ reg  [7:0]  dev2_data = 0;
 reg  [7:0]  dev3_data = 0;
 reg  [7:0]  dev4_data = 0;
 
+// ================= SERIAL COM1 PORT =================
+reg         com1_rdnxtch = 0;
+
 // ================= CPU ASIGNATION IRQS =================
 assign      irq =   irq1 |
                     irq2 |
@@ -97,28 +100,36 @@ device #(.BASE_ADDR(32'h3)) downButton(
     .irq_ack        (irq_ack4)
 );
 
-always @(*) begin
+always @(posedge clk) begin
+    if (uut.cpg.memory[4095] == 0) begin 
+        com1_rdnxtch <= 1;
+    end
+    else if (uut.cpg.memory[4095] != 0 && com1_rdnxtch) begin
+        com1_rdnxtch <= 0;
+        $write("%c", uut.cpg.memory[4095]);
+        uut.cpg.memory[4095] <= 0;
+    end
     if (irq1) 
-        selectec_dev = 1;
+        selectec_dev <= 1;
     else if (irq2) 
-        selectec_dev = 2;
+        selectec_dev <= 2;
     else if (irq3) 
-        selectec_dev = 3;
+        selectec_dev <= 3;
     else if (irq4) 
-        selectec_dev = 4;
+        selectec_dev <= 4;
     else 
-        selectec_dev = 0;
+        selectec_dev <= 0;
 end
 
 initial begin
     $display("pulsar5024XM_x32 chip debug");
     $readmemh("program.hex", uut.cpg.memory);
+    uut.quiet = 1;
     //$dumpfile("wave.vcd");
     //$dumpvars(0, tb);
 
     #10 reset = 0;
-    
-    /**
+    /*
     #20 dev1_data = 8'd23;
     #1  dev1_enable = 1;
     #2  dev1_enable = 0;
@@ -134,8 +145,7 @@ initial begin
     #50 dev4_data = 8'd46;
     #1  dev4_enable = 1;
     #2  dev4_enable = 0;
-    */
-
+*/
     #100 $finish;
 end
 

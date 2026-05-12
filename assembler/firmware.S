@@ -32,20 +32,44 @@ _init:
     Add-Byte-Sp-Sp
     Lea-Dword z
     Out-Byte Out
+    Lea-Dword serial_char_send
+    Out-Byte 0
+    Out-Byte 'x'
 loop:
     Hlt
     Jmp-Word-Clasic loop
 alpha_button_irq:
-    Lea-Dword 25
-    Jmp-Word-Clasic loop
+    Push-Dword      Px
+    Lea-Dword       25
+    Lea-Dword       Sp
+    Jmp-Dword-Clasic Sp
 beta_button_irq:
-    Lea-Dword 30
-    Jmp-Word-Clasic loop
+    Push-Dword      Px
+    Lea-Dword       30
+    Lea-Dword       Sp
+    Jmp-Dword-Clasic Sp
 up_button_irq:
-    Lea-Dword 35
-    Jmp-Word-Clasic loop
+    Push-Dword      Px
+    Lea-Dword       35
+    Lea-Dword       Sp
+    Jmp-Dword-Clasic Sp
 down_button_irq:
-    Lea-Dword 40
-    Jmp-Word-Clasic loop
-end:
-Assume-Fill 0xFFF
+    Push-Dword      Px
+    Lea-Dword       40
+    Lea-Dword       Sp
+    Jmp-Dword-Clasic Sp
+
+Assume-Fill         0xFFF
+
+; ================= serial =================
+; the serial console
+
+; send char
+serial_char_send:
+    Assume-Byte     1
+; command sender
+serial_port_cmd:
+    Assume-Byte     2
+; serial status
+serial_port_status:
+    Assume-Byte     3
