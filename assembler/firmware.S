@@ -1,3 +1,13 @@
+; ===========================================
+;       FIRMWARE BY MARKARIAN AND THE
+;       PULSAR PROJECT FOR MACHINE
+;       'pulsar 5024XM x32 PC'
+;
+; firmware para la maquina pulsar5024XM de 32 
+; bits
+;
+; ===========================================
+
 Assume-Org          0
 
 SERIAL_MODE_SWITCH  Equ  0x01
@@ -12,7 +22,18 @@ _devices_vector:
     _upBtn_vec_ptr:
         Assume-Dword up_button_irq
     _downBtn_vec_ptr:
-        Assume-Dword down_button_irq 
+        Assume-Dword down_button_irq
+    _cassete_vec_ptr:
+        Assume-Dword cassete_irq
+
+Assume-Fill         0x1F0
+
+; vectors de funciones del firmware
+_vectors:
+    Assume-Word     put_char
+    Assume-Word     put_msg
+    Assume-Word     put_msg
+
 _init:
     ; inicializar la consola serial
     Lea-Dword       serial_port_cmd
@@ -92,18 +113,66 @@ down_button_irq:
 
 Assume-Fill         0xFFF
 
-; ================= serial =================
-; the serial console
+; ===========================================
+;           SERIAL MMIO
+;
+; datos de MMIO para la consola serial y mas
+; cosas relacionadas con la depuracion
+;
+; ===========================================
 
-; send char
+SERIAL_DEFAULT_VAL  Equ 0       ; valor por defecto de el caracter o dato
+                                ; para indicarle a la consola serial que
+                                ; no este molestando el cpu y com1          
+
+SERIAL_UNDEF_STATU  Equ 0xFF    ; estado indefinido, si la consola serial no
+                                ; funciona o el hardware no es compatible entonces
+                                ; no existe puerto serial asi que nunca se actualizara
+
+SERIAL_NON_CMD_SND  Equ 0       ; indica que no hay ningun comando que procesar y que deje
+                                ; de procesar comandos hasta que actualizes esa direccion de
+                                ; memoria osea la de 'serial_port_cmd'
+
+; ===========================================
+; caracter a mandar al puerto serial o datos
+; de comando respectivo
+;
 serial_char_send:
-    Assume-Byte     0
-; command sender
+    Assume-Byte     SERIAL_DEFAULT_VAL
+; ===========================================
+; mandon de comandos al puerto serial
+;
 serial_port_cmd:
-    Assume-Byte     0
-; serial status
+    Assume-Byte     SERIAL_NON_CMD_SND
+; ===========================================
+; estado del puerto serial
+;
 serial_port_status:
-    Assume-Byte     0
+    Assume-Byte     SERIAL_UNDEF_STATU
+
+Assume-Fill     0x1FFF
 
 bootmsg:
     Assume-Byte     'b', 'o', 'o', 't', 'i', 'n', 'g', ' ', 'f', 'r', 'o',  'm', ' ', 'R', 'O', 'M', 10, 0
+
+Assume-Fill     0x2FFF
+
+; ================= cassete =================
+; funciones de cassete
+
+; ===========================================
+;       CASSETE IRQ ISR
+;
+; funcion interna de cassete no el de para 
+; obtener funciones si no datos o mas cosas
+;
+cassete_irq:
+    Push-Dword      Px
+    Jmp-Dword-Clasic cassete_fnc_end
+; ===========================================
+; fin de la funcion de cassete
+;
+cassete_fnc_end:
+
+    Lea-Dword       Sp
+    Jmp-Dword-Clasic Sp
