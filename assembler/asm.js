@@ -55,6 +55,14 @@ export function tokenize(code) {
         }
         value = parseInt(value2, 16);
       }
+      else if (value == "0" && code[i] === "b") {
+        i++;
+        let value2 = "";
+        while (i < code.length && (code[i] == '0' || code[i] == '1')) {
+          value2 += code[i++];
+        }
+        value = parseInt(value2, 2);
+      }
       tokens.push({ type: "number", value: Number(value) });
       continue;
     }
@@ -336,6 +344,17 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
         let bytesfill = fillto - len;
         result.push(...Array(bytesfill).fill(0));
       }
+    }
+    else if (parseSize(peek().value.toUpperCase()) !== undefined) {
+      let sizeof = parseSize(consume().value.toUpperCase());
+      let primarys = toBigEndianBytes(parseIdent(parsePrimary().value), sizeof);
+      while (peek() && peek().value === ",") {
+        consume();
+        primarys.push(...toBigEndianBytes(
+          parseIdent(parsePrimary().value), sizeof
+        ));
+      }
+      result.push(...primarys);
     }
     else if (peek().type === 'symbol' && peek().value === ';') break;
     else if (peek().type === 'identifier' && typeof peek().value === 'string') {

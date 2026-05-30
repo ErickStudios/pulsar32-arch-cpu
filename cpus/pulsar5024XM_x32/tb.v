@@ -17,6 +17,10 @@ reg  [7:0]  firmware_status = 0;
 reg  [7:0]  modifier_01 = 0;
 reg  [7:0]  ohman = 0;
 
+// ================= SIMULATED VIDEO ADAPTER =================
+reg  [7:0]  pix_x;
+reg  [7:0]  pix_y;
+
 // ================= NATIVE MMIO =================
 wire        dev_wrt_en;
 wire [31:0] dev_wrt_addr;
@@ -198,8 +202,12 @@ device #(.BASE_ADDR(32'h4)) cassete(
 always @(posedge clk) begin
     firmware_status = uut.memory[32'h7FFF];
 
-    /*if (dev_wrt_en && dev_wrt_addr == 0) begin
-    end*/
+    if (dev_wrt_en && dev_wrt_addr == 5) begin
+        if (!uut.quiet) $display("%d (%8x) HARDWARE   CM1 PUTPIX %0d %0d %0d",uut.pc - 1, uut.pc, pix_x, pix_y, dev_wrt_val);
+    end
+    
+    if (dev_wrt_en && dev_wrt_addr == 6) pix_x = dev_wrt_val;
+    if (dev_wrt_en && dev_wrt_addr == 7) pix_y = dev_wrt_val;
 
     case (ohman)
     8'h00: begin
@@ -281,7 +289,10 @@ always @(posedge clk) begin
                     com1_next_char_is_cmd = 0;
                 end
                 else begin 
-                    if (com1_mode == 1) $write("%c", mrv);
+                    
+                    if (com1_mode == 1) begin 
+                        if (!uut.quiet) $display("%d (%8x) HARDWARE   CM1 PUTCHR %0d",uut.pc - 1, uut.pc, mrv);
+                    end
                 end
                 modifier_01 = 1;
                 mwv <= 0;
@@ -302,13 +313,13 @@ initial begin
     $readmemh("program.hex", uut.memory);
     $readmemh("cassete.hex", disk0_cassete);
 
-    uut.quiet = 1;
+    //uut.quiet = 1;
 
     #10 reset = 0;
 
-    #20 cassete_data = 0;
+    /*#20 cassete_data = 0;
     #1 cassete_enable = 1;
-    #2 cassete_enable = 0;
+    #2 cassete_enable = 0;*/
 
     /*#20 dev1_data = 8'd23;
     #1  dev1_enable = 1;
@@ -326,7 +337,7 @@ initial begin
     #1  dev4_enable = 1;
     #2  dev4_enable = 0;*/
 
-    #100000 $finish;
+    #1000000 $finish;
 end
 
 endmodule
