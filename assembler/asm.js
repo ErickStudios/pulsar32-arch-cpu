@@ -1,6 +1,7 @@
 export class Context {
   constructor() {
     this.symbols = new Map();
+    this.equs = new Map();
     this.codelen = 0;
     this.orgIn = 0;
     this.result = [];
@@ -130,10 +131,16 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
       if (ctx.symbols.has(ident.value)) {
         return ({ type: 'inm', value: ctx.symbols.get(ident.value) + ctx.orgIn });
       }
+      if (ctx.equs.has(ident.value)) {
+        return ({ type: 'inm', value: ctx.equs.get(ident.value) });
+      }
       return ({ type: 'inm', value: 0 });
     }
     if (ctx.symbols.has(ident.value)) {
       return ({ type: 'inm', value: ctx.symbols.get(ident.value) + ctx.orgIn });
+    }
+    if (ctx.equs.has(ident.value)) {
+      return ({ type: 'inm', value: ctx.equs.get(ident.value) });
     }
     return ({ type: 'inm', value: 0 });
 
@@ -368,7 +375,7 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
       } else if (peek().value.toUpperCase() === 'EQU') {
         consume();
         let v = consume().value;
-        if (!('passDefedNot' in ctx)) ctx.symbols.set(varName, v);
+        if (!('passDefedNot' in ctx)) ctx.equs.set(varName, v);
         continue;
       }else {
         throw new Error("Unexpected identifier: " + varName);

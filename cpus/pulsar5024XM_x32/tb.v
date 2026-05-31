@@ -17,9 +17,21 @@ reg  [7:0]  firmware_status = 0;
 reg  [7:0]  modifier_01 = 0;
 reg  [7:0]  ohman = 0;
 
+// ================= CASSETE READER =================
+reg         anull_all_fs0 = 0;
+reg  [15:0] fs0_sector_to_read = 0;
+reg  [15:0] fs0_byte_to_read = 0;
+reg  [3:0]  fs0_read_stage = 0;
+reg  [1:0]  fs0_status_lh = 0;
+reg  [15:0] fs0_byte_exactly = 0;
+
 // ================= SIMULATED VIDEO ADAPTER =================
 reg  [7:0]  pix_x;
 reg  [7:0]  pix_y;
+
+wire        mem_wrt_ene;
+wire [31:0] mem_wrt_addre;
+wire [7:0]  mem_wrt_vale;
 
 // ================= NATIVE MMIO =================
 wire        dev_wrt_en;
@@ -40,6 +52,7 @@ assign mwa =
     modifier_01 == 1 ?  4095 :
     modifier_01 == 2 ?  4096 :
     modifier_01 == 3 ?  32'h2FFF :
+    modifier_01 == 4 ?  32'h4FFF + fs0_byte_to_read :
                         32'h00000000;
 
 assign mra = mwa;
@@ -114,7 +127,11 @@ cpu uut(
 
     .dev_wrt_en     (dev_wrt_en),
     .dev_wrt_addr   (dev_wrt_addr),
-    .dev_wrt_val    (dev_wrt_val)
+    .dev_wrt_val    (dev_wrt_val),
+    
+    .mem_wrt_ene    (mem_wrt_ene),
+    .mem_wrt_addre  (mem_wrt_addre),
+    .mem_wrt_vale   (mem_wrt_vale)
 );
 
 // ================= DEVICES BUS =================
@@ -200,61 +217,96 @@ device #(.BASE_ADDR(32'h4)) cassete(
 );
 
 always @(posedge clk) begin
-    firmware_status = uut.memory[32'h7FFF];
+
+    if (mem_wrt_ene && mem_wrt_addre == 32'h7FFF) begin
+        firmware_status = mem_wrt_vale;
+    end
 
     if (dev_wrt_en && dev_wrt_addr == 5) begin
         if (!uut.quiet) $display("%d (%8x) HARDWARE   CM1 PUTPIX %0d %0d %0d",uut.pc - 1, uut.pc, pix_x, pix_y, dev_wrt_val);
     end
-    
-    if (dev_wrt_en && dev_wrt_addr == 6) pix_x = dev_wrt_val;
-    if (dev_wrt_en && dev_wrt_addr == 7) pix_y = dev_wrt_val;
-
-    case (ohman)
-    8'h00: begin
-        if (com1_cmd_mrstage == 0) begin
-            com1_cmd_mrstage <= 1;
-            modifier_01 = 2;
-            mrb <= 1;
+    else if (dev_wrt_en && dev_wrt_addr == 6) pix_x = dev_wrt_val;
+    else if (dev_wrt_en && dev_wrt_addr == 7) pix_y = dev_wrt_val;
+    else if (dev_wrt_en && dev_wrt_addr == 8) begin
+        if (com1_next_char_is_cmd && com1_next_cmd == 8'h01) begin
+            com1_mode = dev_wrt_val;
+            com1_next_char_is_cmd = 0;
         end
-        else if (com1_cmd_mrstage == 1) begin
-            com1_cmd_mrstage <= 2; // tranquilo el cpu ya esta trabajando en tu solicitud
-        end
-        // listom cariño
-        else if (com1_cmd_mrstage == 2) begin
-            com1_cmd_mrstage <= 0;
-            ohman = ohman + 1;
-            if (mrv != 0) begin
-                com1_next_cmd = mrv;
-                modifier_01 = 2;
-                mwv <= 0;
-                mwb <= 1;
-                com1_next_char_is_cmd = 1;
+        else begin     
+            if (com1_mode == 1) begin 
+                if (!uut.quiet) $display("%d (%8x) HARDWARE   CM1 PUTCHR %0d",uut.pc - 1, uut.pc, dev_wrt_val);
             end
         end
     end
-    8'h01: begin
-        if (cassete_inserted == 1 && firmware_status == 1) begin
-            cassete_inserted = 2;
-            // se inserto un cassete o hay uno y se le pide al firmware que lo maneje
-            modifier_01 = 3;
-            mwv <= 24;
-            mwb <= 1;
+    else if (dev_wrt_en && dev_wrt_addr == 10) begin
+      if (fs0_status_lh == 0) begin
+        fs0_status_lh <= 1;
+        fs0_sector_to_read <= dev_wrt_val;
+      end
+      else if (fs0_status_lh == 1) begin
+        fs0_status_lh <= 0;
+        fs0_sector_to_read = (fs0_sector_to_read << 8) | dev_wrt_val;
+        anull_all_fs0 <= 1;
+        fs0_byte_to_read <= 0;
+        if (!uut.quiet) $display("%d (%8x) HARDWARE   FS0 READBF %0d",uut.pc - 1, uut.pc, fs0_sector_to_read);
+      end
+    end
+    else if (anull_all_fs0) begin
+        if (fs0_byte_to_read >= 511) begin
+            anull_all_fs0 <= 0;
             cassete_enable <= 1;
+            fs0_read_stage <= 1;
         end
-        else if (cassete_inserted == 2) begin
-            cassete_inserted = 3;
+        else if (fs0_read_stage == 0) begin
+            fs0_byte_exactly = (fs0_sector_to_read * 512) + fs0_byte_to_read;
+            modifier_01 <= 4;
+            mwb <= 1;
+            mwv <= disk0_cassete[fs0_byte_exactly];
+            fs0_read_stage <= 1;
         end
-        else if (cassete_inserted == 3) begin
-            cassete_enable <= 0;
-            cassete_inserted = 0;
-            ohman = 2;
-            mwb <= 0;
+        else if (fs0_read_stage == 1) begin
+            fs0_read_stage <= 2;
         end
-        else begin
-          ohman = ohman + 1;
+        else if (fs0_read_stage == 2) begin
+            fs0_read_stage <= 0;
+            fs0_byte_to_read <= fs0_byte_to_read + 1;
         end
     end
-    endcase
+    else if (fs0_read_stage == 1) begin
+        fs0_read_stage <= 2;
+    end
+    else if (fs0_read_stage == 2) begin
+        fs0_read_stage <= 0;
+        cassete_enable <= 0;
+    end
+    else if (cassete_inserted == 1 && firmware_status == 1) begin
+        cassete_inserted = 2;
+        // se inserto un cassete o hay uno y se le pide al firmware que lo maneje
+        modifier_01 = 3;
+        mwv <= 24;
+        mwb <= 1;
+        cassete_enable <= 1;
+    end
+    else if (cassete_inserted == 2) begin
+        cassete_inserted = 3;
+    end
+    else if (cassete_inserted == 3) begin
+        cassete_enable <= 0;
+        cassete_inserted = 0;
+        ohman = 2;
+        mwb <= 0;
+    end
+    else if (dev_wrt_en && dev_wrt_addr == 9) begin
+        com1_cmd_mrstage <= 0;
+        ohman = ohman + 1;
+        com1_next_cmd = dev_wrt_val;
+        modifier_01 = 2;
+        com1_next_char_is_cmd = 1;
+    end
+
+    else begin
+        ohman = ohman + 1;
+    end
 
     // reseteo del puerto serial
     if (reset) begin
@@ -263,48 +315,6 @@ always @(posedge clk) begin
         com1_mode = 8'hFF;
         com1_rdnxtch = 0;
         cassete_inserted = 1;
-    end
-
-    if (ohman == 2) begin
-        if (com1_cmd_mrstage == 0) begin
-            modifier_01 <= 1;
-            mrb <= 1;
-            com1_cmd_mrstage <= 1;
-        end
-        else if (com1_cmd_mrstage == 1) begin
-            com1_cmd_mrstage <= 2;
-        end
-        else if (com1_cmd_mrstage == 2) begin
-            com1_cmd_mrstage <= 0;
-            ohman <= 0;
-
-            if (mrv == 0) begin 
-                com1_rdnxtch <= 1;
-            end
-            
-            else if (mrv != 0 && com1_rdnxtch) begin
-                com1_rdnxtch <= 0;
-                if (com1_next_char_is_cmd && com1_next_cmd == 8'h01) begin
-                    com1_mode = mrv;
-                    com1_next_char_is_cmd = 0;
-                end
-                else begin 
-                    
-                    if (com1_mode == 1) begin 
-                        if (!uut.quiet) $display("%d (%8x) HARDWARE   CM1 PUTCHR %0d",uut.pc - 1, uut.pc, mrv);
-                    end
-                end
-                modifier_01 = 1;
-                mwv <= 0;
-                mwb <= 1;
-                mwx <= 1;
-            end
-
-            if (mwx) begin
-                mwx <= 0;
-                mwb <= 0;
-            end
-        end
     end
 end
 

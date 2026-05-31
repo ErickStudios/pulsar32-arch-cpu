@@ -91,7 +91,11 @@ module cpu(
 
     output reg      dev_wrt_en,
     output reg [31:0] dev_wrt_addr,
-    output reg [7:0]  dev_wrt_val
+    output reg [7:0]  dev_wrt_val,
+
+    output reg      mem_wrt_ene,
+    output reg [31:0] mem_wrt_addre,
+    output reg [7:0]  mem_wrt_vale
 );
 
 // ============== cpu variables ==============}
@@ -119,6 +123,7 @@ reg [31:0]          irq_vector;
 reg                 quiet = 0;
 reg                 paused;
 reg [1:0]           CWFDD;
+reg [1:0]           CWFDM;
 
 // ============== alu components ==============
 reg  [31:0]         aluA;
@@ -274,6 +279,10 @@ begin
         dev_wrt_addr = addr - 64000;
         dev_wrt_val  = val;
     end
+    CWFDM = 2;
+    mem_wrt_ene   = 1;
+    mem_wrt_addre = addr;
+    mem_wrt_vale  = val;
     memory[addr] = val;
 end endtask
 task ex_ldx; begin
@@ -450,8 +459,15 @@ always @(posedge clk) begin
         else if (CWFDD != 0) begin
             CWFDD = CWFDD - 1;
         end
-        
-        if (sp < 50000) begin
+
+        if (CWFDM == 1) begin
+            mem_wrt_ene = 0;
+            CWFDM = CWFDM - 1;
+        end
+        else if (CWFDM != 0) begin
+            CWFDM = CWFDM - 1;
+        end
+                if (sp < 50000) begin
             if (!quiet) $display("HARDWARE   STACK OVERFLOW %0d %0d", irq_addr, irq_data);
             general_reset();
             alu_reset();

@@ -63,7 +63,7 @@ _init:
     Out-Byte        0
 
     ; inicializar la consola serial
-    Lea-Dword       serial_port_cmd
+    Lea-Dword       com1_cmd_mmio
     Out-Byte        SERIAL_MODE_SWITCH
                                 ; no esta lista la consola serial o cuando la apagas o
                                 ; depues de un comando entonces haces que el proximo
@@ -84,18 +84,33 @@ _init:
     Lea-Dword       sga_col_mmio
     Out-Byte        45
     Lea-Dword       sga_data_mmio
-    Out-Byte        0xFF
-    Jmp-Word-Clasic loop
+    Out-Byte        0x22
+    Jmp-Word-Clasic C1
 
 ; ===========================================
-; el loop que el firmware tiene para ser un
-; os pequeño en si mismo y esperar eventos
+; cuando el firmware espera a cargar el sector
+; para bootear en el
 ;
-loop:
-    Jmp-Word-Clasic loop2
-loop2:
+C1:
+    Lea-Dword       Px
+    Jmp-Word-Clasic C2
+C2:
+    Lea-Dword       cassete_external_cmd    ; comando
+    Out-Byte        CASSETE_READ_SECTA      ; lee un sector
+    Lea-Dword       cassete_sector_read_cmd ; la direccion
+    Out-Byte        0                       ; parte alta
+    Out-Byte        0                       ; sector 0
+C3:
     Hlt                         ; espera
-    Jmp-Word-Clasic loop        ; salta
+    Lea-Dword       cassete_readed_sector_finish ; la direccion
+    Mov-Byte                    ; mover byte
+    Push-Byte       Out         ; leer
+    Cmp-Byte-Inm-Sp 1           ; verificar
+    Jmp-Word-Zero   C4          ; se logro leer
+    Jmp-Word-Clasic C3          ; salta
+C4:
+    Jmp-Word-Clasic cassete_external_sector ; salta al sector el codigo del bootloader
+                                            ; de 512 bytes
 
 fixSerial:
     Add-Byte-Inm-Inm ' ', 0
@@ -114,8 +129,7 @@ fixSerial:
 ;
 put_char:
     Push-Dword      Px          ; poner dword
-    Lea-Dword       serial_char_send ; el caracter a mandar
-    Out-Byte        0           ; actualizar
+    Lea-Dword       com1_new_mmio ; el caracter a mandar
     Out-Byte        Out         ; mandar
     Lea-Dword       Sp          ; restaurar la direccion
     Jmp-Dword-Clasic Sp         ; regresar
@@ -349,6 +363,8 @@ cassete_fnc_inserted:
 ; fin de la funcion de cassete
 ;
 cassete_fnc_end:
+    Lea-Dword       cassete_external_cmd
+    Out-Byte        0
     Add-Dword-Sp-Inm 0
     Lea-Dword       Sp
     Jmp-Dword-Clasic Sp
@@ -389,3 +405,9 @@ sga_row_mmio:
                     Byte 0   ; posicion y de la SGA
 sga_col_mmio:       
                     Byte 0   ; posicion x de la SGA
+com1_new_mmio:
+                    Byte 0   ; nuevo MMIO del com1
+com1_cmd_mmio:
+                    Byte 0   ; nuevo MMIO del com1
+cassete_sector_read_cmd:
+                    Byte 0   ; escribir 2 veces para completar el word

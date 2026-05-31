@@ -205,6 +205,12 @@ def main():
     )
 
     parser.add_argument(
+        "-mx",
+        action="store_true",
+        help="out to the file"
+    )
+
+    parser.add_argument(
         "-cpu",
         default="cpu",
         help="vvp target"
@@ -224,6 +230,7 @@ def main():
 
     machine = MACHINES[args.pc]()
     vvip = Object()
+    mx = bool(args.mx)
     if hasattr(machine, "__envinit__"): vvip = machine.__envinit__()
 
     #print(f"[PQEMU] Starting machine: {args.pc}")
@@ -237,7 +244,7 @@ def main():
     proc = subprocess.Popen(
         ["vvp", args.cpu],
         stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
         text=True,
         encoding="utf-8",
         bufsize=1
@@ -247,13 +254,13 @@ def main():
     # STREAM TRACE
     # -----------------------------------------------------
 
-    f = open("pc.log.vm", "w")
+    if mx: f = open("pc.log.vm", "w")
 
     try:
 
         for line in proc.stdout:
-            f.write(line)
-            f.flush()
+            if mx: f.write(line)
+            if mx: f.flush()
 
             line = line.rstrip()
 
