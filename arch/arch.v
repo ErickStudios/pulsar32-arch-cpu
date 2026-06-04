@@ -344,7 +344,37 @@ task ex_sdx; begin
         write_mem_byte(currentPtrAddrs + i, (a >> (8 * (OprOperationBytes - 1 - i))) & 8'hFF);
     end
 end endtask
+task ex_int; begin
+    mode = memory[pc];
+    OprOperationBytes = memory[pc + 1];
+    pc = pc + 2;
 
+    operateInstant(mode[3:0],OprOperationBytes, a);
+    if (!quiet) $write("ANONYMUS");
+    if ((OprOperationBytes * 8) < 10) begin
+        if (!quiet) $write("%0d ", OprOperationBytes * 8);
+    end 
+    else begin
+        if (!quiet) $write("%0d", OprOperationBytes * 8);
+    end 
+    if (!quiet) $write(" INT %s %0d\n", castToDebug(mode[3:0]), a);
+    int_launch(a);
+end endtask
+
+task int_launch; input [31:0] abn; begin
+    if (!quiet) $write("%d (%8x) ",pc - 1, pc);
+    if (!quiet) $display("SOFTWARE   IRQ %0d", abn);
+    save_dir();
+    vector_base = 4;
+    offset = abn * 4;
+    irq_vector = {
+        memory[vector_base + offset],
+        memory[vector_base + offset + 1],
+        memory[vector_base + offset + 2],
+        memory[vector_base + offset + 3]
+    };
+    pc = irq_vector;
+end endtask
 task irq_check; begin
     if (!quiet) $write("%d (%8x) ",pc - 1, pc);
     if (!quiet) $display("HARDWARE   IRQ %0d %0d", irq_addr, irq_data);
@@ -439,6 +469,8 @@ always @(posedge clk) begin
             8'h07: ex_jmp();
             // SDX = Save Data RegiXters to memory
             8'h08: ex_sdx();
+            // INT = software INTerruption
+            8'h09: ex_int();
         endcase
     end
     end

@@ -33,16 +33,66 @@ _reset_vector:
 ; los atienden cada vez que lo requieren
 ;
 _devices_vector:
+    ; 00h-1Fh
     Dword           alpha_button_irq ; vector del boton 'A' o mas conocido como Alpha
     Dword           beta_button_irq ; vector del boton 'B' o mas conocido como Beta
     Dword           up_button_irq ; vector del boton 'Up'
     Dword           down_button_irq ; vector del boton 'Down'
     Dword           cassete_irq ; vector del dispositivo de la disquetera de cartuchos del mmfs0 (mounted/maped FileSystem 0)
+    Dword           0
+    Dword           0
+    Dword           0
+    Dword           0
+    Dword           0
+    Dword           0
+    Dword           0
+    Dword           0
+    Dword           0
+    Dword           0
+    Dword           0
+
+    ; 10h-20h
+    Dword           put_char
+    Dword           put_msg
+    Dword           readsec
+    Dword           memcpy
+    Dword           0
+    Dword           0
+    Dword           0
+    Dword           0
+    Dword           0
+    Dword           0
+    Dword           0
+    Dword           0
+    Dword           0
+    Dword           0
+    Dword           0
+    Dword           0
+    Dword           0
+
+    ; 21h-30h
+    Dword           0
+    Dword           0
+    Dword           0
+    Dword           0
+    Dword           0
+    Dword           0
+    Dword           0
+    Dword           0
+    Dword           0
+    Dword           0
+    Dword           0
+    Dword           0
+    Dword           0
+    Dword           0
+    Dword           0
+    Dword           0
 
 Assume-Fill         0x1F0
 
 ; ===========================================
-; vectors de funciones del firmware
+; vectors de funciones del firmware 
+; (para mantener compatibilidad)
 ;
 _vectors:
     Word        put_char ; coloca un caracter
@@ -256,8 +306,9 @@ RS3:
     Hlt                         ; espera
     Lea-Dword       cassete_readed_sector_finish ; la direccion
     Mov-Byte                    ; mover byte
+    Push-Byte       1           ; 1
     Push-Byte       Out         ; leer
-    Cmp-Byte-Inm-Sp 1           ; verificar
+    Cmp-Byte-Sp-Sp              ; verificar
     Jmp-Word-Zero   RS4         ; se logro leer
     Jmp-Word-Clasic RS3         ; salta
 RS4:
@@ -544,4 +595,4 @@ com1_cmd_mmio:
 cassete_sector_read_cmd:
                     Byte 0   ; escribir 2 veces para completar el word
 cassete_selected_mmfs:
-                    Byte 0   ; disco seleccionado , start = (fs * 255) + sector
+                    Byte 0   ; disco seleccionado , start = (fs * 512) + sector

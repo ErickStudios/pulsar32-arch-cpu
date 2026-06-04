@@ -241,6 +241,22 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
         result.push(1, sizeof, parseSymbol(expr.value))
       }
     }
+    else if (peek().value.toUpperCase() === 'INT') {
+      consume();
+      expect('-');
+      result.push(9);
+      let sizeof = parseSize(consume().value);
+      let expr = parsePrimary();
+      if (expr.type === 'inm') {
+        result.push(0, sizeof, ...toBigEndianBytes(expr.value, sizeof));
+      }
+      else if (expr.type == 'symbol') {
+        result.push(1, sizeof, parseSymbol(expr.value))
+      }
+      else if (expr.type == 'stack') {
+        result.push(2, sizeof);
+      }
+    }
     else if (peek().value.toUpperCase() === 'LEA') {
       consume();
       expect('-');
@@ -259,11 +275,37 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
     }
     else if (peek().value.toUpperCase() === 'MOV') {
       consume();
-      result.push(4);
-      result.push(8);
-      expect('-');
-      let sizeof = parseSize(consume().value);
-      result.push(sizeof, 0);
+      if (peek().value == '-') {
+        consume();
+        result.push(4);
+        result.push(8);
+        let sizeof = parseSize(consume().value);
+        result.push(sizeof, 0);
+      }
+      else {
+        expect("[");
+        let sizeof;
+        let expr;
+        let sizeof1 = parseSize(consume().value);
+        let expr1 = parsePrimary();
+        expect("]");
+        expect(",");
+        let sizeof2 = parseSize(consume().value);
+        let expr2 = parsePrimary();
+
+        result.push(1);
+        sizeof = sizeof1;
+        expr = expr1;
+        if (expr.type === 'inm') { result.push(0, sizeof, ...toBigEndianBytes(expr.value, sizeof)); }
+        else if (expr.type == 'symbol') { result.push(1, sizeof, parseSymbol(expr.value)) }
+        else if (expr.type == 'stack') { result.push(2, sizeof); }
+
+        result.push(8);
+        sizeof = sizeof2;
+        expr = expr2;
+        if (expr.type === 'inm') { result.push(0, sizeof, ...toBigEndianBytes(expr.value, sizeof)); }
+        else if (expr.type == 'symbol') { result.push(1, sizeof, parseSymbol(expr.value)) }
+      }
     }
     else if (peek().value.toUpperCase() === 'HLT') {
       consume();
