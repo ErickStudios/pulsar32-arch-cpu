@@ -55,6 +55,29 @@ module alu(
     output reg  [31:0]  result
 );
 
+// ================= FPU A =================
+reg             fpu_a_sig;
+reg  [7:0]      fpu_a_exp;
+reg  [22:0]     fpu_a_mat;
+
+// ================= FPU B =================
+reg             fpu_b_sig;
+reg  [7:0]      fpu_b_exp;
+reg  [22:0]     fpu_b_mat;
+
+// ================= FPU R =================
+reg             fpu_r_sig;
+reg  [7:0]      fpu_r_exp;
+reg  [22:0]     fpu_r_mat;
+
+// ================= FPU MORE =================
+reg  [7:0]      exp_diff;
+reg  [24:0]     mat_a_ext;
+reg  [24:0]     mat_b_ext;
+reg  [24:0]     sum_mat;
+reg  [47:0]     mul_mat;
+reg  [47:0]     div_mat;
+
 always @(posedge clk) begin
     if (aluActive == 1) begin
         case(opcode)
@@ -67,6 +90,167 @@ always @(posedge clk) begin
             8'h07: result = a ^ b;
             8'h09: result = a << b;
             8'h0A: result = a >> b;
+            8'h0B: begin
+                if (a[30:0] == 31'b0) begin result = b; end 
+                else if (b[30:0] == 31'b0) begin result = a; end 
+                else begin
+                    fpu_a_sig = a[31];
+                    fpu_a_exp = a[30:23];
+                    fpu_a_mat = a[22:0];
+
+                    fpu_b_sig = b[31];
+                    fpu_b_exp = b[30:23];
+                    fpu_b_mat = b[22:0];
+
+                    mat_a_ext = {2'b01, fpu_a_mat};
+                    mat_b_ext = {2'b01, fpu_b_mat};
+
+                    if (fpu_a_exp >= fpu_b_exp) begin
+                        exp_diff  = fpu_a_exp - fpu_b_exp;
+                        mat_b_ext = mat_b_ext >> exp_diff;
+                        fpu_r_exp = fpu_a_exp;
+                    end else begin
+                        exp_diff  = fpu_b_exp - fpu_a_exp;
+                        mat_a_ext = mat_a_ext >> exp_diff;
+                        fpu_r_exp = fpu_b_exp;
+                    end
+
+                    if (fpu_a_sig == fpu_b_sig) begin
+                        sum_mat   = mat_a_ext + mat_b_ext;
+                        fpu_r_sig = fpu_a_sig;
+                    end else begin
+                        if (mat_a_ext >= mat_b_ext) begin
+                            sum_mat   = mat_a_ext - mat_b_ext;
+                            fpu_r_sig = fpu_a_sig;
+                        end else begin
+                            sum_mat   = mat_b_ext - mat_a_ext;
+                            fpu_r_sig = fpu_b_sig;
+                        end
+                    end
+
+                    if (sum_mat[24]) begin 
+                        sum_mat   = sum_mat >> 1;
+                        fpu_r_exp = fpu_r_exp + 1;
+                    end else begin
+                        if (sum_mat[23] == 0 && sum_mat[22] == 1) begin sum_mat = sum_mat << 1; fpu_r_exp = fpu_r_exp - 1; end
+                        else if (sum_mat[23] == 0 && sum_mat[21] == 1) begin sum_mat = sum_mat << 2; fpu_r_exp = fpu_r_exp - 2; end
+                        else if (sum_mat[23] == 0 && sum_mat[20] == 1) begin sum_mat = sum_mat << 3; fpu_r_exp = fpu_r_exp - 3; end
+                        else if (sum_mat[23] == 0 && sum_mat[19] == 1) begin sum_mat = sum_mat << 4; fpu_r_exp = fpu_r_exp - 4; end
+                        else if (sum_mat[23] == 0 && sum_mat[18] == 1) begin sum_mat = sum_mat << 5; fpu_r_exp = fpu_r_exp - 5; end
+                    end
+
+                    fpu_r_mat = sum_mat[22:0];
+
+                    result = {fpu_r_sig, fpu_r_exp, fpu_r_mat};
+                end
+            end
+            8'h0C: begin
+                if (a[30:0] == 31'b0) begin 
+                    result = {~b[31], b[30:0]};
+                end else if (b[30:0] == 31'b0) begin 
+                    result = a; 
+                end else begin
+                    fpu_a_sig = a[31];
+                    fpu_a_exp = a[30:23];
+                    fpu_a_mat = a[22:0];
+
+                    fpu_b_sig = ~b[31];
+                    fpu_b_exp = b[30:23];
+                    fpu_b_mat = b[22:0];
+
+                    mat_a_ext = {2'b01, fpu_a_mat};
+                    mat_b_ext = {2'b01, fpu_b_mat};
+
+                    if (fpu_a_exp >= fpu_b_exp) begin
+                        exp_diff  = fpu_a_exp - fpu_b_exp;
+                        mat_b_ext = mat_b_ext >> exp_diff;
+                        fpu_r_exp = fpu_a_exp;
+                    end else begin
+                        exp_diff  = fpu_b_exp - fpu_a_exp;
+                        mat_a_ext = mat_a_ext >> exp_diff;
+                        fpu_r_exp = fpu_b_exp;
+                    end
+
+                    if (fpu_a_sig == fpu_b_sig) begin
+                        sum_mat   = mat_a_ext + mat_b_ext;
+                        fpu_r_sig = fpu_a_sig;
+                    end else begin
+                        if (mat_a_ext >= mat_b_ext) begin
+                            sum_mat   = mat_a_ext - mat_b_ext;
+                            fpu_r_sig = fpu_a_sig;
+                        end else begin
+                            sum_mat   = mat_b_ext - mat_a_ext;
+                            fpu_r_sig = fpu_b_sig;
+                        end
+                    end
+
+                    if (sum_mat[24]) begin 
+                        sum_mat   = sum_mat >> 1;
+                        fpu_r_exp = fpu_r_exp + 1;
+                    end else begin
+                        if (sum_mat[23] == 0 && sum_mat[22] == 1) begin sum_mat = sum_mat << 1; fpu_r_exp = fpu_r_exp - 1; end
+                        else if (sum_mat[23] == 0 && sum_mat[21] == 1) begin sum_mat = sum_mat << 2; fpu_r_exp = fpu_r_exp - 2; end
+                        else if (sum_mat[23] == 0 && sum_mat[20] == 1) begin sum_mat = sum_mat << 3; fpu_r_exp = fpu_r_exp - 3; end
+                        else if (sum_mat[23] == 0 && sum_mat[19] == 1) begin sum_mat = sum_mat << 4; fpu_r_exp = fpu_r_exp - 4; end
+                        else if (sum_mat[23] == 0 && sum_mat[18] == 1) begin sum_mat = sum_mat << 5; fpu_r_exp = fpu_r_exp - 5; end
+                    end
+
+                    fpu_r_mat = sum_mat[22:0];
+                    result = {fpu_r_sig, fpu_r_exp, fpu_r_mat};
+                end
+            end
+            8'h0D: begin
+                if (a[30:0] == 31'b0 || b[30:0] == 31'b0) begin
+                    result = 32'b0;
+                end else begin
+                    fpu_a_sig = a[31];
+                    fpu_a_exp = a[30:23];
+                    fpu_a_mat = a[22:0];
+
+                    fpu_b_sig = b[31];
+                    fpu_b_exp = b[30:23];
+                    fpu_b_mat = b[22:0];
+                    fpu_r_sig = fpu_a_sig ^ fpu_b_sig;
+                    fpu_r_exp = (fpu_a_exp + fpu_b_exp) - 8'd127;
+                    mul_mat = {1'b1, fpu_a_mat} * {1'b1, fpu_b_mat};
+
+                    if (mul_mat[47]) begin
+                        mul_mat = mul_mat >> 1;
+                        fpu_r_exp = fpu_r_exp + 1;
+                    end
+                    fpu_r_mat = mul_mat[45:23];
+
+                    result = {fpu_r_sig, fpu_r_exp, fpu_r_mat};
+                end
+            end
+        8'h0E: begin
+            if (b[30:0] == 31'b0) begin
+                result = 32'h7FC00000;
+            end else if (a[30:0] == 31'b0) begin
+                result = 32'b0;
+            end else begin
+                fpu_a_sig = a[31];
+                fpu_a_exp = a[30:23];
+                fpu_a_mat = a[22:0];
+
+                fpu_b_sig = b[31];
+                fpu_b_exp = b[30:23];
+                fpu_b_mat = b[22:0];
+
+                fpu_r_sig = fpu_a_sig ^ fpu_b_sig;
+                fpu_r_exp = (fpu_a_exp - fpu_b_exp) + 8'd127;
+
+                div_mat = ({1'b1, fpu_a_mat} << 23) / {1'b1, fpu_b_mat};
+
+                if (div_mat[23] == 0) begin
+                    div_mat = div_mat << 1;
+                    fpu_r_exp = fpu_r_exp - 1;
+                end
+
+                fpu_r_mat = div_mat[22:0];
+                result = {fpu_r_sig, fpu_r_exp, fpu_r_mat};
+            end
+        end
             default: result = 0;
         endcase
     end
@@ -99,7 +283,7 @@ module cpu(
 );
 
 // ============== cpu variables ==============}
-reg  [7:0]          memory [0:96000]; // 64K normal mem, 32K for MMIO
+reg  [7:0]          memory [0:960000]; // 64K normal mem, 32K for MMIO
 reg  [31:0]         pc;
 reg  [31:0]         sp;
 reg  [31:0]         currentPtrAddrs;
@@ -111,7 +295,7 @@ reg  [7:0]          OprOperator;
 reg  [7:0]          OprOperationBytes;
 reg  [7:0]          valueRegister;
 reg  [7:0]          op_id;
-reg  [31:0]         a, b, result;
+reg  [31:0]         a, b, result, r0, r1, r2, r3;
 reg  [7:0]          ir;
 reg  [7:0]          opcode;
 reg  [7:0]          mode;
@@ -199,10 +383,15 @@ begin
             a = memory[pc];
             pc = pc + 1;
 
+            // register
             case (a)
-                0: val = result;
-                1: val = valueRegister;
-                2: val = currentPtrAddrs;
+                0: val =        result; // Out
+                1: val =        valueRegister; // [[Obsolete]]
+                2: val =        currentPtrAddrs;// Px
+                3: val =        r0;     // Ax (a regiXter)
+                4: val =        r1;     // Bx (b regiXter)
+                5: val =        r2;     // Cx (c/cycles regiXter)
+                6: val =        r3;     // Dx (d/dataBackup regiXter)
                 default: val = 0;
             endcase
         end
@@ -250,6 +439,22 @@ task save_dir; begin
     memory[sp + 3] = pc[7:0];
 end endtask
 
+task write_mem_byte; 
+input [31:0]    addr;
+input [7:0]     val;
+begin
+    if (addr > 63999) begin
+        CWFDD = 1;
+        dev_wrt_en   = 1;
+        dev_wrt_addr = addr - 64000;
+        dev_wrt_val  = val;
+    end
+    CWFDM = 2;
+    mem_wrt_ene   = 1;
+    mem_wrt_addre = addr;
+    mem_wrt_vale  = val;
+    memory[addr] = val;
+end endtask
 task ex_lpx; begin
     mode = memory[pc];
     OprOperationBytes = memory[pc + 1];
@@ -267,23 +472,6 @@ task ex_lpx; begin
     if (!quiet) $write(" %0d\n", a);
 
     currentPtrAddrs = a;
-end endtask
-
-task write_mem_byte; 
-input [31:0]    addr;
-input [7:0]     val;
-begin
-    if (addr > 63999) begin
-        CWFDD = 2;
-        dev_wrt_en   = 1;
-        dev_wrt_addr = addr - 64000;
-        dev_wrt_val  = val;
-    end
-    CWFDM = 2;
-    mem_wrt_ene   = 1;
-    mem_wrt_addre = addr;
-    mem_wrt_vale  = val;
-    memory[addr] = val;
 end endtask
 task ex_ldx; begin
     if (!quiet) $display("REGISTER8  LDX");
@@ -435,6 +623,36 @@ task ex_int; begin
     if (!quiet) $write(" INT %s %0d\n", castToDebug(mode[3:0]), a);
     int_launch(a);
 end endtask
+task ex_wrx; begin
+    mode = memory[pc];
+    OprOperationBytes = memory[pc + 1];
+    b = memory[pc + 2];
+    pc = pc + 3;
+
+    if (!quiet) $write("ANONYMUS");
+    if ((OprOperationBytes * 8) < 10) begin
+        if (!quiet) $write("%0d ", OprOperationBytes * 8);
+    end
+    else begin
+        if (!quiet) $write("%0d", OprOperationBytes * 8);
+    end
+    if (!quiet) $write(" WRX ");
+    operateInstant(mode[3:0],OprOperationBytes,a);
+    if (!quiet) $write("SET REGI %0d TO %s %0d\n",b, castToDebug(mode[3:0]), a);
+
+    // register
+    case (b)
+        0: result =         a; // Out
+        1: valueRegister =  a; // [[Obsolete]]
+        2: currentPtrAddrs =a;  // Px
+        3: r0 =             a;  // Ax (a regiXter)
+        4: r1 =             a;  // Bx (b regiXter)
+        5: r2 =             a;  // Cx (c/cycles regiXter)
+        6: r3 =             a;  // Dx (d/dataBackup regiXter)
+        default: valueRegister = 0;
+    endcase
+
+end endtask
 
 task int_launch; input [31:0] abn; begin
     if (!quiet) $write("%d (%8x) ",pc - 1, pc);
@@ -475,6 +693,26 @@ end endtask
 // | #LOOP #NONDEBUG #DEBUG                       |
 // ------------------------------------------------
 always @(posedge clk) begin
+    if (mem_wrt_bool) 
+        memory[mem_wrt_addr] <= mem_wrt_val;
+
+    if (mem_rdr_bool) 
+        mem_rdr_val <= memory[mem_rdr_addr]; 
+    if (CWFDD == 1) begin
+        dev_wrt_en <= 0;
+        CWFDD = CWFDD - 1;
+    end
+    else if (CWFDD != 0) begin
+        CWFDD = CWFDD - 1;
+    end
+
+    if (CWFDM == 1) begin
+        mem_wrt_ene = 0;
+        CWFDM = CWFDM - 1;
+    end
+    else if (CWFDM != 0) begin
+        CWFDM = CWFDM - 1;
+    end
     // reset signal power on/restart computer
     if (reset) begin        
         general_reset();
@@ -483,21 +721,7 @@ always @(posedge clk) begin
         CWFDM = 0;
     // tick of click
     end else begin
-        if (CWFDD == 1) begin
-            dev_wrt_en = 0;
-            CWFDD = CWFDD - 1;
-        end
-        else if (CWFDD != 0) begin
-            CWFDD = CWFDD - 1;
-        end
 
-        if (CWFDM == 1) begin
-            mem_wrt_ene = 0;
-            CWFDM = CWFDM - 1;
-        end
-        else if (CWFDM != 0) begin
-            CWFDM = CWFDM - 1;
-        end
         if (sp < 50000) begin
             if (!quiet) $display("HARDWARE   STACK OVERFLOW %0d %0d", irq_addr, irq_data);
             general_reset();
@@ -529,7 +753,8 @@ always @(posedge clk) begin
         if (!quiet) $write("%d (%8x) ",pc - 1, pc);
         case (ir)
             // LPX = Load Pointer eXpretion
-            8'h01: ex_lpx();
+            8'h01: 
+                ex_lpx();
             // LDX = Load From memory To Data RegiXter (Data Register = valueRegister beta name)
             8'h02: ex_ldx();
             // PUS = Push Unity or regiSter
@@ -546,6 +771,8 @@ always @(posedge clk) begin
             8'h08: ex_sdx();
             // INT = software INTerruption
             8'h09: ex_int();
+            // WRX = WRite regiXter
+            8'h0A: ex_wrx();
         endcase
     end
     end

@@ -3,6 +3,7 @@ import subprocess
 import re
 import sys
 import tkinter
+import threading
 from PIL import Image, ImageTk
 
 class Object: pass
@@ -255,8 +256,22 @@ def main():
     # -----------------------------------------------------
 
     if mx: f = open("pc.log.vm", "w")
+    al = open("hkey_kbad_pc.stat.vm", "w")
+
+    al.write("0000000000000000000000000000000000000000")
 
     try:
+
+        def update_monitor():
+            if hasattr(vvip, "monitor") and vvip.monitor.winfo_exists():
+                try:
+                    vvip.monitor.update()
+                    
+                    vvip.monitor.after(2, update_monitor)
+                except tkinter.TclError:
+                    return
+                
+        update_monitor()
 
         for line in proc.stdout:
             if mx: f.write(line)

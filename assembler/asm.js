@@ -7,6 +7,7 @@ export class Context {
     this.result = [];
   }
 }
+
 export function tokenize(code) {
   const tokens = [];
   let i = 0;
@@ -44,28 +45,43 @@ export function tokenize(code) {
       continue;
     }
     if (isNumber(c)) {
-      let value = "";
-      while (i < code.length && isNumber(code[i])) {
-        value += code[i++];
-      }
-      if (value == "0" && code[i] === "x") {
-        i++;
-        let value2 = "";
-        while (i < code.length && (isNumber(code[i]) || ['A','B','C','D','E','F'].includes(code[i].toUpperCase()))) {
-          value2 += code[i++];
+        let value = "";
+
+        while (
+            i < code.length &&
+            (
+                isNumber(code[i]) ||
+                "ABCDEFabcdef".includes(code[i])
+            )
+        ) {
+            value += code[i++];
         }
-        value = parseInt(value2, 16);
-      }
-      else if (value == "0" && code[i] === "b") {
-        i++;
-        let value2 = "";
-        while (i < code.length && (code[i] == '0' || code[i] == '1')) {
-          value2 += code[i++];
+
+        if (
+            i < code.length &&
+            code[i].toLowerCase() === "h"
+        ) {
+            i++;
+            value = parseInt(value, 16);
         }
-        value = parseInt(value2, 2);
-      }
-      tokens.push({ type: "number", value: Number(value) });
-      continue;
+        else if (value === "0" && code[i] === "x") {
+          i++;
+          let value2 = "";
+          while (i < code.length && (isNumber(code[i]) || ['A','B','C','D','E','F'].includes(code[i].toUpperCase()))) {
+            value2 += code[i++];
+          }
+          value = parseInt(value2, 16);
+        }
+        else {
+            value = Number(value);
+        }
+
+        tokens.push({
+            type: "number",
+            value
+        });
+
+        continue;
     }
     tokens.push({ type: "symbol", value: c });
     i++;
@@ -121,6 +137,16 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
         expect("]");
         return ({ type: 'inm', value: result });
       }
+      else if (peek().value.toUpperCase() === 'SEGMENT') {
+        consume();
+        let v2 = parsePrimary();
+        expect(':');
+        let v3 = parsePrimary();
+        let result = (v3.value - v2.value) + v1.value;
+        expect("]");
+        console.log(result);
+        return ({ type: 'inm', value: result });
+      }
       else if (peek().value.toUpperCase() === 'OUT') {
         consume();
         let v2 = parsePrimary();
@@ -140,11 +166,23 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
       if (ident.value.toUpperCase() === 'OUT') {
         return ({ type: 'symbol', value: 'cpu.registers.result' });
       }
-      if (ident.value.toUpperCase() === 'DX') {
+      /*if (ident.value.toUpperCase() === 'DX') {
         return ({ type: 'symbol', value: 'cpu.registers.data' });
-      }
+      } [[Obsolete]]*/
       if (ident.value.toUpperCase() === 'PX') {
         return ({ type: 'symbol', value: 'cpu.registers.ptr' });
+      }
+      if (ident.value.toUpperCase() === 'AX') {
+        return ({ type: 'symbol', value: 'cpu.registers.ax' });
+      }
+      if (ident.value.toUpperCase() === 'BX') {
+        return ({ type: 'symbol', value: 'cpu.registers.bx' });
+      }
+      if (ident.value.toUpperCase() === 'CX') {
+        return ({ type: 'symbol', value: 'cpu.registers.cx' });
+      }
+      if (ident.value.toUpperCase() === 'DX') {
+        return ({ type: 'symbol', value: 'cpu.registers.dx' });
       }
       if (ctx.symbols.has(ident.value)) {
         return ({ type: 'inm', value: ctx.symbols.get(ident.value) + ctx.orgIn });
@@ -164,15 +202,14 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
 
   }
   function parseSymbol(name) {
-    if (name === 'cpu.registers.result') {
-      return 0;
-    }
-    if (name === 'cpu.registers.data') {
-      return 1;
-    }
-    if (name === 'cpu.registers.ptr') {
-      return 2;
-    }
+    if (name === 'cpu.registers.result') {return 0;}
+    if (name === 'cpu.registers.data') {return 1;}
+    if (name === 'cpu.registers.ptr') {return 2;}
+    if (name === 'cpu.registers.ax') {return 3;}
+    if (name === 'cpu.registers.bx') {return 4;}
+    if (name === 'cpu.registers.cx') {return 5;}
+    if (name === 'cpu.registers.dx') {return 6;}
+
   }
   function operandParse(op) {
     if (op.toUpperCase() == "SP") return { type: 'stack', bind: 2 };
@@ -337,8 +374,9 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
         }
         return false;
       }
-      casterA(operand1);
-       if (casterA(operand2)) expect(',');
+      let a0 = casterA(operand1);
+       if (a0 && operand2.type !== 'stack') expect(',');
+      let a1 = casterA(operand2);
     }
     else if (peek().value.toUpperCase() === "JMP") {
       consume();
@@ -412,6 +450,33 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
         let fillto = consume().value;
         let bytesfill = fillto - len;
         result.push(...Array(bytesfill).fill(0));
+      }
+    }
+    else if (peek().value.toUpperCase() === 'ALIGN') {
+      consume();
+      let alignTo = consume().value;
+      let bytesfill = (alignTo - (len % alignTo)) % alignTo;
+      result.push(...Array(bytesfill).fill(0));
+    }
+    else if (peek().value.toUpperCase() === 'ROR') {
+      consume();
+      result.push(0xA);
+      expect('-');
+      let sizeof = parseSize(consume().value);
+      let reg = parsePrimary();
+      if (reg.type === 'symbol') {
+        let a = parseSymbol(reg.value);
+        expect(",");
+        let expr = parsePrimary();
+        if (expr.type === 'inm') {
+          result.push(0, sizeof, a, ...toBigEndianBytes(expr.value, sizeof));
+        }
+        else if (expr.type == 'symbol') {
+          result.push(1, sizeof, a, parseSymbol(expr.value))
+        }
+        else if (expr.type == 'stack') {
+          result.push(2, sizeof, a);
+        }
       }
     }
     else if (parseSize(peek().value.toUpperCase()) !== undefined) {

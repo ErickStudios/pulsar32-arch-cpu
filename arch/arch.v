@@ -24,7 +24,7 @@ module cpu(
 );
 
 // ============== cpu variables ==============}
-reg  [7:0]          memory [0:96000]; // 64K normal mem, 32K for MMIO
+reg  [7:0]          memory [0:960000]; // 64K normal mem, 32K for MMIO
 reg  [31:0]         pc;
 reg  [31:0]         sp;
 reg  [31:0]         currentPtrAddrs;
@@ -36,7 +36,7 @@ reg  [7:0]          OprOperator;
 reg  [7:0]          OprOperationBytes;
 reg  [7:0]          valueRegister;
 reg  [7:0]          op_id;
-reg  [31:0]         a, b, result;
+reg  [31:0]         a, b, result, r0, r1, r2, r3;
 reg  [7:0]          ir;
 reg  [7:0]          opcode;
 reg  [7:0]          mode;
@@ -124,10 +124,15 @@ begin
             a = memory[pc];
             pc = pc + 1;
 
+            // register
             case (a)
-                0: val = result;
-                1: val = valueRegister;
-                2: val = currentPtrAddrs;
+                0: val =        result; // Out
+                1: val =        valueRegister; // [[Obsolete]]
+                2: val =        currentPtrAddrs;// Px
+                3: val =        r0;     // Ax (a regiXter)
+                4: val =        r1;     // Bx (b regiXter)
+                5: val =        r2;     // Cx (c/cycles regiXter)
+                6: val =        r3;     // Dx (d/dataBackup regiXter)
                 default: val = 0;
             endcase
         end
@@ -175,6 +180,22 @@ task save_dir; begin
     memory[sp + 3] = pc[7:0];
 end endtask
 
+task write_mem_byte; 
+input [31:0]    addr;
+input [7:0]     val;
+begin
+    if (addr > 63999) begin
+        CWFDD = 1;
+        dev_wrt_en   = 1;
+        dev_wrt_addr = addr - 64000;
+        dev_wrt_val  = val;
+    end
+    CWFDM = 2;
+    mem_wrt_ene   = 1;
+    mem_wrt_addre = addr;
+    mem_wrt_vale  = val;
+    memory[addr] = val;
+end endtask
 task ex_lpx; begin
     mode = memory[pc];
     OprOperationBytes = memory[pc + 1];
@@ -192,23 +213,6 @@ task ex_lpx; begin
     if (!quiet) $write(" %0d\n", a);
 
     currentPtrAddrs = a;
-end endtask
-
-task write_mem_byte; 
-input [31:0]    addr;
-input [7:0]     val;
-begin
-    if (addr > 63999) begin
-        CWFDD = 2;
-        dev_wrt_en   = 1;
-        dev_wrt_addr = addr - 64000;
-        dev_wrt_val  = val;
-    end
-    CWFDM = 2;
-    mem_wrt_ene   = 1;
-    mem_wrt_addre = addr;
-    mem_wrt_vale  = val;
-    memory[addr] = val;
 end endtask
 task ex_ldx; begin
     if (!quiet) $display("REGISTER8  LDX");
@@ -360,6 +364,36 @@ task ex_int; begin
     if (!quiet) $write(" INT %s %0d\n", castToDebug(mode[3:0]), a);
     int_launch(a);
 end endtask
+task ex_wrx; begin
+    mode = memory[pc];
+    OprOperationBytes = memory[pc + 1];
+    b = memory[pc + 2];
+    pc = pc + 3;
+
+    if (!quiet) $write("ANONYMUS");
+    if ((OprOperationBytes * 8) < 10) begin
+        if (!quiet) $write("%0d ", OprOperationBytes * 8);
+    end
+    else begin
+        if (!quiet) $write("%0d", OprOperationBytes * 8);
+    end
+    if (!quiet) $write(" WRX ");
+    operateInstant(mode[3:0],OprOperationBytes,a);
+    if (!quiet) $write("SET REGI %0d TO %s %0d\n",b, castToDebug(mode[3:0]), a);
+
+    // register
+    case (b)
+        0: result =         a; // Out
+        1: valueRegister =  a; // [[Obsolete]]
+        2: currentPtrAddrs =a;  // Px
+        3: r0 =             a;  // Ax (a regiXter)
+        4: r1 =             a;  // Bx (b regiXter)
+        5: r2 =             a;  // Cx (c/cycles regiXter)
+        6: r3 =             a;  // Dx (d/dataBackup regiXter)
+        default: valueRegister = 0;
+    endcase
+
+end endtask
 
 task int_launch; input [31:0] abn; begin
     if (!quiet) $write("%d (%8x) ",pc - 1, pc);
@@ -400,6 +434,26 @@ end endtask
 // | #LOOP #NONDEBUG #DEBUG                       |
 // ------------------------------------------------
 always @(posedge clk) begin
+    if (mem_wrt_bool) 
+        memory[mem_wrt_addr] <= mem_wrt_val;
+
+    if (mem_rdr_bool) 
+        mem_rdr_val <= memory[mem_rdr_addr]; 
+    if (CWFDD == 1) begin
+        dev_wrt_en <= 0;
+        CWFDD = CWFDD - 1;
+    end
+    else if (CWFDD != 0) begin
+        CWFDD = CWFDD - 1;
+    end
+
+    if (CWFDM == 1) begin
+        mem_wrt_ene = 0;
+        CWFDM = CWFDM - 1;
+    end
+    else if (CWFDM != 0) begin
+        CWFDM = CWFDM - 1;
+    end
     // reset signal power on/restart computer
     if (reset) begin        
         general_reset();
@@ -408,21 +462,7 @@ always @(posedge clk) begin
         CWFDM = 0;
     // tick of click
     end else begin
-        if (CWFDD == 1) begin
-            dev_wrt_en = 0;
-            CWFDD = CWFDD - 1;
-        end
-        else if (CWFDD != 0) begin
-            CWFDD = CWFDD - 1;
-        end
 
-        if (CWFDM == 1) begin
-            mem_wrt_ene = 0;
-            CWFDM = CWFDM - 1;
-        end
-        else if (CWFDM != 0) begin
-            CWFDM = CWFDM - 1;
-        end
         if (sp < 50000) begin
             if (!quiet) $display("HARDWARE   STACK OVERFLOW %0d %0d", irq_addr, irq_data);
             general_reset();
@@ -454,7 +494,8 @@ always @(posedge clk) begin
         if (!quiet) $write("%d (%8x) ",pc - 1, pc);
         case (ir)
             // LPX = Load Pointer eXpretion
-            8'h01: ex_lpx();
+            8'h01: 
+                ex_lpx();
             // LDX = Load From memory To Data RegiXter (Data Register = valueRegister beta name)
             8'h02: ex_ldx();
             // PUS = Push Unity or regiSter
@@ -471,6 +512,8 @@ always @(posedge clk) begin
             8'h08: ex_sdx();
             // INT = software INTerruption
             8'h09: ex_int();
+            // WRX = WRite regiXter
+            8'h0A: ex_wrx();
         endcase
     end
     end

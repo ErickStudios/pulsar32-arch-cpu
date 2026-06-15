@@ -17,7 +17,7 @@ mcpy_siz                Equ 29192       ; source
 
 ; =================== variables para el stage2 ===================
 SECTOR_READ_MMIO        Equ 64010       ; sector mmio
-SAFE_ZONE_STAGE2        Equ 95001       ; zona segura para el stage2
+S1                      Equ 95001       ; zona segura para el stage2
 
 ; =================== tabla de particion ===================
 _start:
@@ -29,30 +29,28 @@ _start:
 
 ; =================== codigo fuente ===================
 _l:
-    ; imprimir identificador
-    Lea-Word            msg             ; la frase
-    Int-Byte            0x11            ; el int
-
     ; copiar el sector
     Mov                 [Dword mcpy_src], Dword 0x4FFF ; fuente
-    Mov                 [Dword mcpy_dst], Dword SAFE_ZONE_STAGE2 ; destino
+    Mov                 [Dword mcpy_dst], Dword S1 ; destino
     Mov                 [Dword mcpy_siz], Dword 512 ; tamaño
     Int-Byte            0x13            ; el int
-    Jmp-Dword-Clasic    [C1 In SAFE_ZONE_STAGE2] ; saltar
+    Jmp-Dword-Clasic    [C1 In S1] ; saltar
 C1:
+    ; imprimir identificador
+    Ror-Byte            Ax, 1Eh         ; el servicio
+    Ror-Dword           Bx, msg         ; la frase
+    Int-Byte            10h             ; el int
+
     ; leer sector
-    Lea-Dword           LLBASEC_SECT_PTR; el sector
-    Out-Word            1               ; sector 1
-    Int-Byte            0x12            ; el int
-    Jmp-Dword-Clasic    [ SECTOR2_CODE Out SECTOR2 ] ; sector2
+    Ror-Byte            Ax, 02h         ; funcion
+    Ror-Byte            Bx, 1           ; sector
+    Ror-Byte            Cx, 01h         ; fs
+    Ror-Dword           Dx, 024000h     ; memoria
+    Int-Byte            12h            ; el int
+    Jmp-Dword-Clasic    0x4FFF          ; sector2
     
 msg:
     Assume-Byte         'm','m','f','s','0',0
-
-; =================== final del sector ===================
-_end:
-    Assume-Fill         510             ; llenar a 510
-    Assume-Byte         'O','K'
 
 ; =====================================
 ;       STAGE2 CODE
@@ -61,11 +59,57 @@ _end:
 ; del disco
 ; =====================================
 
-SECTOR2:
+    Align               512
+Stage2Sector:
+    Jmp-Dword-Clasic    [024000h Segment Stage2Sector:Stage2Data]
+Stage2Data:
 test:
     Assume-Byte 'm','m','f','s','1',0
-SECTOR2_CODE:
+Stage2Code:
     ; imprimir identificador
-    Lea-Dword           [test Out SECTOR2] ; la frase
-    Int-Byte            0x11            ; el int
+    Ror-Byte            Ax, 1Eh         ; el servicio
+    Ror-Dword           Bx, [024000h segment Stage2Sector:test] ; la frase
+    Int-Byte            10h             ; el int
     Hlt 
+
+; =====================================
+;       SRC/IMG/SPLASHLOGO.FD
+;
+; el logo splash de el cassete para el OS
+; centro de juegos
+; =====================================
+
+    Align               512
+LaSebollaLogo:
+    Byte                00Fh,000h,003h,0B5h,017h,000h,0FFh,009h,000h,001h,0FDh,005h,000h,003h,0B5h,010h
+    Byte                000h,002h,0B5h,005h,000h,0FFh,001h,000h,004h,0FDh,003h,000h,003h,0FDh,00Eh,000h
+    Byte                003h,0FDh,005h,000h,005h,0B5h,003h,000h,0FFh,001h,000h,004h,0FDh,002h,000h,005h
+    Byte                0FDh,00Dh,000h,003h,0FDh,005h,000h,005h,0B5h,003h,000h,0FFh,001h,000h,004h,0FDh
+    Byte                003h,000h,003h,0FDh,00Eh,000h,003h,0FDh,005h,000h,005h,0B5h,003h,000h,0FFh,009h
+    Byte                000h,001h,0FDh,010h,000h,001h,0FDh,006h,000h,005h,0B5h,003h,000h,0FFh,029h,000h
+    Byte                0FFh,001h,000h,002h,0B5h,001h,000h,001h,0BDh,003h,0FDh,002h,000h,005h,0B5h,001h
+    Byte                000h,004h,0FDh,001h,0BDh,005h,0B5h,003h,0FDh,002h,000h,003h,0B5h,003h,0FDh,004h
+    Byte                0B5h,0FFh,004h,0B5h,004h,0FDh,002h,000h,001h,0B5h,003h,000h,001h,0B5h,002h,0FDh
+    Byte                003h,000h,001h,0FDh,001h,0B5h,002h,000h,002h,0B5h,004h,0FDh,002h,0B5h,002h,000h
+    Byte                002h,0FDh,001h,000h,001h,0B5h,001h,000h,001h,0B5h,001h,000h,0FFh,001h,0B5h,003h
+    Byte                000h,002h,0FDh,001h,000h,001h,0FDh,005h,000h,002h,0B5h,001h,0BDh,003h,0FDh,001h
+    Byte                000h,001h,0BDh,001h,0B5h,003h,000h,001h,0B5h,001h,0FDh,001h,000h,002h,0FDh,002h
+    Byte                0B5h,002h,000h,002h,0FDh,001h,000h,001h,0B5h,001h,000h,001h,0B5h,001h,000h,0FFh
+    Byte                001h,0B5h,003h,000h,001h,0BDh,002h,0FDh,003h,000h,003h,0B5h,002h,000h,001h,0BDh
+    Byte                001h,0FDh,002h,000h,001h,0FDh,001h,0BDh,001h,0B5h,003h,000h,001h,0B5h,001h,0FDh
+    Byte                001h,000h,002h,0FDh,002h,0B5h,002h,000h,001h,0FDh,001h,0BDh,001h,000h,001h,0B5h
+    Byte                001h,000h,001h,0B5h,001h,000h,0FFh,001h,0B5h,004h,000h,002h,0FDh,003h,000h,001h
+    Byte                0B5h,003h,000h,001h,0B5h,001h,000h,001h,0FDh,002h,000h,002h,0FDh,001h,0B5h,003h
+    Byte                000h,001h,0B5h,003h,0FDh,001h,000h,002h,0B5h,002h,000h,002h,0FDh,001h,000h,003h
+    Byte                0B5h,001h,000h,0FFh,001h,0B5h,004h,000h,001h,0BDh,001h,0FDh,003h,000h,005h,0B5h
+    Byte                001h,000h,004h,0FDh,001h,0BDh,005h,0B5h,003h,0FDh,001h,000h,002h,0B5h,002h,000h
+    Byte                002h,0FDh,002h,000h,003h,0B5h,0FFh,001h,0B5h,014h,000h,003h,0B5h,007h,000h,001h
+    Byte                0B5h,002h,000h,002h,0FDh,004h,000h,001h,0B5h,0FFh,001h,0B5h,014h,000h,002h,0B5h
+    Byte                007h,000h,002h,0B5h,002h,000h,002h,0FDh,004h,000h,001h,0B5h,0FFh,001h,0B5h,00Ch
+    Byte                000h,003h,0FDh,005h,000h,002h,0B5h,007h,000h,002h,0B5h,002h,000h,002h,0FDh,005h
+    Byte                000h,0FFh,005h,000h,004h,0B5h,004h,000h,004h,0FDh,018h,000h,0FFh,005h,000h,004h
+    Byte                0B5h,004h,000h,003h,0FDh,00Bh,000h,004h,0B5h,007h,000h,001h,0FDh,002h,000h,0FFh
+    Byte                005h,000h,004h,0B5h,00Bh,000h,005h,0FDh,002h,000h,004h,0B5h,005h,000h,004h,0FDh
+    Byte                001h,000h,0FFh,005h,000h,004h,0B5h,00Bh,000h,006h,0FDh,001h,000h,004h,0B5h,005h
+    Byte                000h,004h,0FDh,001h,000h,0FFh,013h,000h,007h,0FDh,001h,000h,004h,0B5h,005h,000h
+    Byte                004h,0FDh,001h,000h,0FFh,01Ch,000h,001h,0B5h,00Ch,000h,0FFh,000h

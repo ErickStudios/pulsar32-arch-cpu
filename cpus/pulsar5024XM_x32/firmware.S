@@ -33,60 +33,36 @@ _reset_vector:
 ; los atienden cada vez que lo requieren
 ;
 _devices_vector:
-    ; 00h-1Fh
+    ; 00h-0Fh
     Dword           alpha_button_irq ; vector del boton 'A' o mas conocido como Alpha
     Dword           beta_button_irq ; vector del boton 'B' o mas conocido como Beta
     Dword           up_button_irq ; vector del boton 'Up'
     Dword           down_button_irq ; vector del boton 'Down'
     Dword           cassete_irq ; vector del dispositivo de la disquetera de cartuchos del mmfs0 (mounted/maped FileSystem 0)
-    Dword           0
-    Dword           0
-    Dword           0
-    Dword           0
-    Dword           0
-    Dword           0
-    Dword           0
-    Dword           0
-    Dword           0
-    Dword           0
-    Dword           0
-
+    Dword           0,0,0,0,0,0,0,0,0,0,0
     ; 10h-20h
-    Dword           put_char
-    Dword           put_msg
-    Dword           readsec
-    Dword           memcpy
-    Dword           0
-    Dword           0
-    Dword           0
-    Dword           0
-    Dword           0
-    Dword           0
-    Dword           0
-    Dword           0
-    Dword           0
-    Dword           0
-    Dword           0
-    Dword           0
-    Dword           0
-
+    Dword           VideoServices ; putchar para imprimir un caracter
+    Dword           put_msg ; print para imprimir un texto
+    Dword           DiskServices ; servicios de disquete
+    Dword           memcpy  ; memory copping para copiar un bloque de memoria a otro
+    Dword           _init   ; reset the pc para reiniciar la pc
+    Dword           0,0,0,0,0,0,0,0,0,0,0,0
     ; 21h-30h
-    Dword           0
-    Dword           0
-    Dword           0
-    Dword           0
-    Dword           0
-    Dword           0
-    Dword           0
-    Dword           0
-    Dword           0
-    Dword           0
-    Dword           0
-    Dword           0
-    Dword           0
-    Dword           0
-    Dword           0
-    Dword           0
+    Dword           0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+
+; ===========================================
+; mapa de caracteres
+;
+; 1234567890
+; ABCDEFGHIJ
+; KLMNOPQRST ^
+;   UVWXYZ  <v>
+;
+char_map:
+    Byte            49,50,51,52,53,54,55,56,57,58,48    ; 1-0
+    Byte            65,66,67,68,69,70,71,72,73,74       ; A-J
+	Byte            75,76,77,78,79,80,81,82,83,84,1     ; K-T & Up
+	Byte            85,86,87,88,89,90,2,3,4             ; U-Z & Left/Right & Down
 
 Assume-Fill         0x1F0
 
@@ -121,9 +97,9 @@ _init:
                                 ; depues de un comando entonces haces que el proximo
                                 ; Byte que envies sea el parametro con el que enviaste 
                                 ; el comando
-    Add-Byte-Inm-Inm 1, 0       ; el modo de limpiar com1 y por ahora directamente 
-                                ; le puedes poner el modo de print out
-    Jmp-Word-Call   put_char    ; mandrlo
+    Ror-Byte        Ax, 0Eh     ; funcion
+    Ror-Byte        Bx, 1       ; caracter
+    Int-Byte        10h         ; interrupcion
     Jmp-Dword-Call  fixSerial   ; si no lo sabian si mandas un caracter en estado cuando
 
     Jmp-Dword-Call  fixSerial   ; arregla la serial
@@ -154,7 +130,11 @@ C2:
     Out-Byte        CASSETE_READ_SECTA      ; lee un sector
     Lea-Dword       cassete_sector_read_cmd ; la direccion
     Out-Byte        0                       ; parte alta
+    Lea-Dword       Px
+    Lea-Dword       Px
+    Lea-Dword       Px
     Out-Byte        0                       ; sector 0
+
 C3:
     Hlt                         ; espera
     Lea-Dword       cassete_readed_sector_finish ; la direccion
@@ -168,26 +148,98 @@ C4:
                                             ; de 512 bytes
 
 fixSerial:
-    Add-Byte-Inm-Inm ' ', 0
-    Jmp-Word-Clasic put_char
+    Ror-Byte        Ax, 0Eh
+    Ror-Byte        Bx, 20h
+    Int-Byte        10h
+    Jmp-Dword-Clasic Sp         ; regresar
 
 ; ===========================================
-;           SERIAL FUNCS
+;           DISK INT
 ;
-; funciones para la consola serial y el puerto
-; de depuracion de la PC
+; funcion de el disco (12h)
+;
+;   Ax: 02h - Read Sector Into Memory:
+;       Bx-Word: El sector
+;       Cx-Word: El Filesystem
+;       Dx-Dword: Destino de la informacion leida
 ;
 ; ===========================================
+
+DiskServices:
+    ; Read Sector Into Memory - Leer sector a la memoria
+    Cmp-Byte-Reg-Inm Ax, 02h    ; comparar
+    Jmp-Dword-Zero  SECT_MEM_W   ; escribir
+
+DiskServicesEnd:
+    Jmp-Dword-Clasic Sp         ; regresar
+
+SECT_MEM_W:
+    ; obtener
+    Lea-Dword       llbasect_sect_low       ; la direccion
+    Out-Word        Bx                      ; el sector
+    Lea-Dword       llbasect_mmfs_low       ; la direccion
+    Out-Word        Cx                      ; el fs
+
+    ; el sector
+    Lea-Dword       cassete_selected_mmfs   ; la direccion
+    Push-Dword      Px                      ; guardar px
+    Lea-Dword       llbasect_mmfs_low       ; el alto
+    Mov-Byte                                ; obtener byte
+    Lea-Dword       Sp                      ; recuperar px
+    Out-Byte        Out                     ; parte alta
+    Push-Dword      Px                      ; guardar px
+    Lea-Dword       llbasect_mmfs_high      ; el bajo
+    Mov-Byte                                ; obtener byte
+    Lea-Dword       Sp                      ; recuperar px    
+    
+    Jmp-Dword-Call  readsec                 ; llamar
+    Mov             [Dword memcpy_src], Dword cassete_external_sector ; fuente
+    Mov             [Dword memcpy_dst], Dword Dx ; destino
+    Mov             [Dword memcpy_siz], Dword 512 ; tamaño
+    Int-Byte        13h                     ; el int de copiar memoria
+    Jmp-Dword-Clasic DiskServicesEnd        ; regresar
+
+; ===========================================
+;           DISPLAY INT
+;
+; funcion de el display (10h)
+;
+;   Ax: 0Eh - TTY Write:
+;       Bx-Byte: El Caracter
+;
+;   Ax: 1Eh - TTY WriteMsg:
+;       Bx-Dword: El mensaje terminado en null
+;                 que sera imprimido en la
+;                 consola
+;
+; ===========================================
+
+VideoServices:
+    ; TTY Write Function - Escribir un caracter
+    Cmp-Byte-Reg-Inm Ax, 0Eh    ; comparar
+    Jmp-Dword-Zero  TTY_WRITE   ; escribir
+
+    ; TTY WriteMsg Function - Escribir un caracter
+    Cmp-Byte-Reg-Inm Ax, 1Eh    ; comparar
+    Jmp-Dword-Zero  VideoWapperWrtMsgCmpty   ; escribir
+
+VideoServicesEnd:
+    Jmp-Dword-Clasic Sp         ; regresar
+
+VideoWapperWrtMsgCmpty:
+    Lea-Dword       Bx          ; el
+    Int-Byte        11h         ; el int de put_msg
+    Jmp-Dword-Clasic VideoServicesEnd   ; regresar
 
 ; ===========================================
 ; manda un caracter a la consola serial
 ;
-put_char:
+TTY_WRITE:
     Push-Dword      Px          ; poner dword
     Lea-Dword       com1_new_mmio ; el caracter a mandar
-    Out-Byte        Out         ; mandar
+    Out-Byte        Bx          ; mandar
     Lea-Dword       Sp          ; restaurar la direccion
-    Jmp-Dword-Clasic Sp         ; regresar
+    Jmp-Dword-Clasic VideoServicesEnd   ; regresar
 
 ; ===========================================
 ; pone un mensaje en la consola serial
@@ -200,12 +252,22 @@ put_msg:
 ; serial
 ;
 put_msg_loop:
+    ; obtener caracter
     Mov-Byte                    ; obtiene el Byte
     Push-Byte       Out         ; pone el Byte en el stack
     Cmp-Byte-Inm-Sp 0           ; compara con terminador
-    Mov-Byte                    ; obtiene el Byte
     Jmp-Word-Zero   put_msg_end ; si es igual terminar
-    Jmp-Dword-Call  put_char    ; pone el caracter en la consola serial
+
+    ; escrbir
+    Mov-Byte                    ; obtiene el Byte
+    Push-Dword      Ax          ; guardar Ax
+    Push-Dword      Bx          ; guardar Bx
+    Ror-Byte        Ax, 0Eh     ; teletipo
+    Ror-Byte        Bx, Out     ; obtener byte
+    Int-Byte        10h         ; servicio
+    Ror-Dword       Bx, Sp      ; recuperar Bx
+    Ror-Dword       Ax, Sp      ; recuperar Ax
+
     Push-Dword      Px          ; guarda la dword
     Add-Dword-Sp-Inm 1          ; suma la direccion de memoria
     Lea-Dword       Out         ; obtiene dword
@@ -262,7 +324,6 @@ M3:
     Push-Dword      1           ; 1
     Push-Dword      Out         ; poner out
     Sub-Dword-Sp-Sp             ; restarle a out
-    C33:
     Out-Dword       Out         ; ponerlo
     Add-Dword-Sp-Inm 0          ; restaurar out
     Lea-Dword       memcpy_siz  ; destino
@@ -551,6 +612,15 @@ llbasect_sect_low:
     Byte            0
 llbasect_sect_high:
     Byte            0
+
+; ===========================================
+; datos de load mmfs
+;
+llbasect_mmfs_low:
+    Byte            0
+llbasect_mmfs_high:
+    Byte            0
+
 
 Assume-Fill 0x7FFF
 
