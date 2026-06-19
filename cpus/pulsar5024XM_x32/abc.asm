@@ -1,8 +1,1 @@
-Dword _init
-
-Assume-Fill 0xFF
-
-_init:
-    Ror-Byte    Ax, 10
-    Lea-Byte    Ax
-    
+    Sub-Byte-Inm-Reg 1, Ah      ; restar

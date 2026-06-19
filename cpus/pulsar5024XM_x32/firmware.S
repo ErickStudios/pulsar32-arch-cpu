@@ -137,6 +137,7 @@ C2:
 
 C3:
     Hlt                         ; espera
+
     Lea-Dword       cassete_readed_sector_finish ; la direccion
     Mov-Byte                    ; mover byte
     Push-Byte       Out         ; leer
@@ -144,7 +145,7 @@ C3:
     Jmp-Word-Zero   C4          ; se logro leer
     Jmp-Word-Clasic C3          ; salta
 C4:
-    Jmp-Word-Clasic cassete_external_sector ; salta al sector el codigo del bootloader
+        Jmp-Word-Clasic cassete_external_sector ; salta al sector el codigo del bootloader
                                             ; de 512 bytes
 
 fixSerial:
@@ -212,6 +213,17 @@ SECT_MEM_W:
 ;                 que sera imprimido en la
 ;                 consola
 ;
+;   Ax: 03h - SGA Img Push
+;       Bx-Dword: El puntero a la imagen comprimida que
+;                 Va a ser mostrada
+;                 en comandos de [repetidor/cmd, color?]
+;                 cualquier valor es aceptado como iterable
+;                 menos 00h que indica el fin de la imagen
+;                 y 0FFh que indica un salto de linea
+;       Cx-Byte:  La posicion X de la imagen
+;       Dx-Byte:  La posicion Y de la imagen
+;
+;
 ; ===========================================
 
 VideoServices:
@@ -221,10 +233,83 @@ VideoServices:
 
     ; TTY WriteMsg Function - Escribir un caracter
     Cmp-Byte-Reg-Inm Ax, 1Eh    ; comparar
-    Jmp-Dword-Zero  VideoWapperWrtMsgCmpty   ; escribir
+    Jmp-Dword-Zero  VideoWapperWrtMsgCmpty ; escribir
+
+    ; SGA Img Push Function - Imprimir una imagen en la pantalla
+    Cmp-Byte-Reg-Inm Ax, 03h    ; comparar
+    Jmp-Dword-Zero  SGA_IMG_PUSH   ; escribir
 
 VideoServicesEnd:
     Jmp-Dword-Clasic Sp         ; regresar
+
+; ===========================================
+; imprime una imagen
+;
+SGA_IMG_PUSH:
+    Lea-Dword       Bx          ; obtener direccion
+    Push-Dword      Px          ; guardar
+    Lea-Dword       SGA_IMG_X_ORIGN ; direccion
+    Out-Byte        Cx          ; guardar
+    Ror-Byte        Bh, Cx      ; guardar
+F10H_C1:
+    Lea-Dword       Sp          ; xd
+    Lea-Dword       sga_row_mmio ; direccion
+    Out-Byte        Dx          ; guardar
+    Lea-Dword       Bx          ; obtener direccion
+    Push-Dword      Px          ; guardar
+    Mov-Byte                    ; obtener byte
+    Ror-Byte        Ax, Out     ; byte
+    Add-Dword-Reg-Inm Px, 1     ; ver el color
+    Lea-Dword       Out         ; revisar
+    Ror-Dword       Bx, Out     ; saltar
+    Cmp-Byte-Reg-Inm Ax, 00h    ; si el valor es 0
+    Jmp-Dword-Zero   F10H_CEND  ; XD?!
+    Cmp-Byte-Reg-Inm Ax, 0FFh   ; si el valor es nueva linea
+    Jmp-Dword-Zero   F10H_CNL   ; nueva linea
+    Add-Dword-Reg-Inm Bx, 1     ; saltar al siguiente punto
+    Ror-Dword       Bx, Out     ; saltar
+    Mov-Byte                    ; obtener
+    Ror-Byte        Al, Out     ; obtener
+    Ror-Byte        Ah, Ax      ; guardar
+
+F10H_C2:
+    Lea-Dword       sga_row_mmio ; obtener direccion
+    Out-Byte        Cx          ; cargar
+    Lea-Dword       sga_col_mmio ; obtener direccion
+    Out-Byte        Dx          ; cargar
+    Lea-Dword       sga_data_mmio ; obtener direccion
+    Out-Byte        Al          ; pintar pixel
+    Add-Byte-Reg-Inm Cx, 1      ; añadir
+    Ror-Byte        Cx, Out     ; obtener
+    Push-Byte       1           ; xd
+    Push-Byte       Ah          ; a.
+    Sub-Byte-Sp-Sp              ; arreglado
+    Ror-Byte        Ah, Out     ; obtener
+    Cmp-Byte-Reg-Inm Ah, 0      ; comparar
+    Jmp-Dword-Greater F10H_C2   ; repetir
+    Jmp-Dword-Clasic F10H_C1    ; saltar
+
+F10H_CEND:
+    Lea-Dword         Sp        ; xd
+    Jmp-Dword-Clasic VideoServicesEnd   ; regresar
+
+F10H_CNL:
+    Add-Byte-Reg-Inm Dx, 1      ; añadir
+    Ror-Byte        Dx, Out     ; obtener
+    Ror-Byte        Cx, Bh      ; cargar
+
+    Jmp-Dword-Clasic F10H_C1            ; regresar
+
+SGA_BYTE_SAVEDA:
+    Byte            0                   ; guardado
+SGA_IMG_X_SAVED:
+    Byte            0                   ; guardado
+SGA_IMG_X_SAVED2:
+    Byte            0                   ; guardado
+SGA_IMG_Y_SAVED:
+    Byte            0                   ; guardado
+SGA_IMG_X_ORIGN:
+    Byte            0                   ; guardado
 
 VideoWapperWrtMsgCmpty:
     Lea-Dword       Bx          ; el
@@ -267,7 +352,6 @@ put_msg_loop:
     Int-Byte        10h         ; servicio
     Ror-Dword       Bx, Sp      ; recuperar Bx
     Ror-Dword       Ax, Sp      ; recuperar Ax
-
     Push-Dword      Px          ; guarda la dword
     Add-Dword-Sp-Inm 1          ; suma la direccion de memoria
     Lea-Dword       Out         ; obtiene dword
@@ -357,12 +441,17 @@ RS2:
     Lea-Dword       llbasect_sect_low       ; el alto
     Mov-Byte                                ; obtener byte
     Lea-Dword       Sp                      ; recuperar px
+    Ror-Byte        Ax, Out                 ; ah
     Out-Byte        Out                     ; parte alta
     Push-Dword      Px                      ; guardar px
     Lea-Dword       llbasect_sect_high      ; el bajo
     Mov-Byte                                ; obtener byte
     Lea-Dword       Sp                      ; recuperar px
-    Out-Byte        Out                     ; parte baja
+    Ror-Byte        Bx, Out                 ; ah
+    Out-Byte        Ax                      ; xd
+    Ror-Byte        Ax, Ax                  ; xd
+    Out-Byte        Bx                      ; xd
+
 RS3:
     Hlt                         ; espera
     Lea-Dword       cassete_readed_sector_finish ; la direccion

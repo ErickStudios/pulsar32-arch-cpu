@@ -44,10 +44,10 @@ C1:
     ; leer sector
     Ror-Byte            Ax, 02h         ; funcion
     Ror-Byte            Bx, 1           ; sector
-    Ror-Byte            Cx, 01h         ; fs
+    Ror-Byte            Cx, 00h         ; fs
     Ror-Dword           Dx, 024000h     ; memoria
-    Int-Byte            12h            ; el int
-    Jmp-Dword-Clasic    0x4FFF          ; sector2
+    Int-Byte            12h             ; el int
+    Jmp-Dword-Clasic    024000h         ; sector2
     
 msg:
     Assume-Byte         'm','m','f','s','0',0
@@ -70,6 +70,19 @@ Stage2Code:
     Ror-Byte            Ax, 1Eh         ; el servicio
     Ror-Dword           Bx, [024000h segment Stage2Sector:test] ; la frase
     Int-Byte            10h             ; el int
+
+    Ror-Byte            Ax, 02h         ; funcion
+    Ror-Byte            Bx, 2           ; sector
+    Ror-Byte            Cx, 00h         ; fs
+    Ror-Dword           Dx, 041000h     ; memoria
+    Int-Byte            12h             ; el int
+
+    Ror-Byte            Ax, 03h         ; el servicio
+    Ror-Dword           Bx, 041000h     ; direccion de la imagen
+    Ror-Byte            Cx, 70h         ; X
+    Ror-Byte            Dx, 70h         ; Y
+    Int-Byte            10h             ; el int
+
     Hlt 
 
 ; =====================================
@@ -81,35 +94,36 @@ Stage2Code:
 
     Align               512
 LaSebollaLogo:
-    Byte                00Fh,000h,003h,0B5h,017h,000h,0FFh,009h,000h,001h,0FDh,005h,000h,003h,0B5h,010h
-    Byte                000h,002h,0B5h,005h,000h,0FFh,001h,000h,004h,0FDh,003h,000h,003h,0FDh,00Eh,000h
-    Byte                003h,0FDh,005h,000h,005h,0B5h,003h,000h,0FFh,001h,000h,004h,0FDh,002h,000h,005h
-    Byte                0FDh,00Dh,000h,003h,0FDh,005h,000h,005h,0B5h,003h,000h,0FFh,001h,000h,004h,0FDh
-    Byte                003h,000h,003h,0FDh,00Eh,000h,003h,0FDh,005h,000h,005h,0B5h,003h,000h,0FFh,009h
-    Byte                000h,001h,0FDh,010h,000h,001h,0FDh,006h,000h,005h,0B5h,003h,000h,0FFh,029h,000h
-    Byte                0FFh,001h,000h,002h,0B5h,001h,000h,001h,0BDh,003h,0FDh,002h,000h,005h,0B5h,001h
-    Byte                000h,004h,0FDh,001h,0BDh,005h,0B5h,003h,0FDh,002h,000h,003h,0B5h,003h,0FDh,004h
-    Byte                0B5h,0FFh,004h,0B5h,004h,0FDh,002h,000h,001h,0B5h,003h,000h,001h,0B5h,002h,0FDh
-    Byte                003h,000h,001h,0FDh,001h,0B5h,002h,000h,002h,0B5h,004h,0FDh,002h,0B5h,002h,000h
-    Byte                002h,0FDh,001h,000h,001h,0B5h,001h,000h,001h,0B5h,001h,000h,0FFh,001h,0B5h,003h
-    Byte                000h,002h,0FDh,001h,000h,001h,0FDh,005h,000h,002h,0B5h,001h,0BDh,003h,0FDh,001h
-    Byte                000h,001h,0BDh,001h,0B5h,003h,000h,001h,0B5h,001h,0FDh,001h,000h,002h,0FDh,002h
-    Byte                0B5h,002h,000h,002h,0FDh,001h,000h,001h,0B5h,001h,000h,001h,0B5h,001h,000h,0FFh
-    Byte                001h,0B5h,003h,000h,001h,0BDh,002h,0FDh,003h,000h,003h,0B5h,002h,000h,001h,0BDh
-    Byte                001h,0FDh,002h,000h,001h,0FDh,001h,0BDh,001h,0B5h,003h,000h,001h,0B5h,001h,0FDh
-    Byte                001h,000h,002h,0FDh,002h,0B5h,002h,000h,001h,0FDh,001h,0BDh,001h,000h,001h,0B5h
-    Byte                001h,000h,001h,0B5h,001h,000h,0FFh,001h,0B5h,004h,000h,002h,0FDh,003h,000h,001h
-    Byte                0B5h,003h,000h,001h,0B5h,001h,000h,001h,0FDh,002h,000h,002h,0FDh,001h,0B5h,003h
-    Byte                000h,001h,0B5h,003h,0FDh,001h,000h,002h,0B5h,002h,000h,002h,0FDh,001h,000h,003h
-    Byte                0B5h,001h,000h,0FFh,001h,0B5h,004h,000h,001h,0BDh,001h,0FDh,003h,000h,005h,0B5h
-    Byte                001h,000h,004h,0FDh,001h,0BDh,005h,0B5h,003h,0FDh,001h,000h,002h,0B5h,002h,000h
-    Byte                002h,0FDh,002h,000h,003h,0B5h,0FFh,001h,0B5h,014h,000h,003h,0B5h,007h,000h,001h
-    Byte                0B5h,002h,000h,002h,0FDh,004h,000h,001h,0B5h,0FFh,001h,0B5h,014h,000h,002h,0B5h
-    Byte                007h,000h,002h,0B5h,002h,000h,002h,0FDh,004h,000h,001h,0B5h,0FFh,001h,0B5h,00Ch
-    Byte                000h,003h,0FDh,005h,000h,002h,0B5h,007h,000h,002h,0B5h,002h,000h,002h,0FDh,005h
-    Byte                000h,0FFh,005h,000h,004h,0B5h,004h,000h,004h,0FDh,018h,000h,0FFh,005h,000h,004h
-    Byte                0B5h,004h,000h,003h,0FDh,00Bh,000h,004h,0B5h,007h,000h,001h,0FDh,002h,000h,0FFh
-    Byte                005h,000h,004h,0B5h,00Bh,000h,005h,0FDh,002h,000h,004h,0B5h,005h,000h,004h,0FDh
-    Byte                001h,000h,0FFh,005h,000h,004h,0B5h,00Bh,000h,006h,0FDh,001h,000h,004h,0B5h,005h
-    Byte                000h,004h,0FDh,001h,000h,0FFh,013h,000h,007h,0FDh,001h,000h,004h,0B5h,005h,000h
-    Byte                004h,0FDh,001h,000h,0FFh,01Ch,000h,001h,0B5h,00Ch,000h,0FFh,000h
+    Byte            008h,000h,001h,0B5h,020h,000h,0FFh,005h,000h,001h,0B5h,001h,000h,001h,0B5h,014h
+    Byte            000h,001h,0B5h,00Ch,000h,0FFh,006h,000h,001h,0B5h,00Ch,000h,007h,0FDh,001h,000h
+    Byte            004h,0B5h,005h,000h,004h,0FDh,001h,000h,0FFh,014h,000h,006h,0FDh,001h,000h,004h
+    Byte            0B5h,005h,000h,004h,0FDh,001h,000h,0FFh,005h,000h,004h,0B5h,00Bh,000h,005h,0FDh
+    Byte            002h,000h,004h,0B5h,005h,000h,004h,0FDh,001h,000h,0FFh,005h,000h,004h,0B5h,004h
+    Byte            000h,003h,0FDh,00Bh,000h,004h,0B5h,007h,000h,001h,0FDh,002h,000h,0FFh,005h,000h
+    Byte            004h,0B5h,004h,000h,004h,0FDh,018h,000h,0FFh,001h,0B5h,00Ch,000h,003h,0FDh,005h
+    Byte            000h,002h,0B5h,007h,000h,002h,0B5h,002h,000h,002h,0FDh,005h,000h,0FFh,001h,0B5h
+    Byte            014h,000h,002h,0B5h,007h,000h,002h,0B5h,002h,000h,002h,0FDh,004h,000h,001h,0B5h
+    Byte            0FFh,001h,0B5h,014h,000h,003h,0B5h,007h,000h,001h,0B5h,002h,000h,002h,0FDh,004h
+    Byte            000h,001h,0B5h,0FFh,001h,0B5h,004h,000h,001h,0BDh,001h,0FDh,003h,000h,005h,0B5h
+    Byte            001h,000h,004h,0FDh,001h,0BDh,005h,0B5h,003h,0FDh,001h,000h,002h,0B5h,002h,000h
+    Byte            002h,0FDh,002h,000h,003h,0B5h,0FFh,001h,0B5h,004h,000h,002h,0FDh,003h,000h,001h
+    Byte            0B5h,003h,000h,001h,0B5h,001h,000h,001h,0FDh,002h,000h,002h,0FDh,001h,0B5h,003h
+    Byte            000h,001h,0B5h,003h,0FDh,001h,000h,002h,0B5h,002h,000h,002h,0FDh,001h,000h,003h
+    Byte            0B5h,001h,000h,0FFh,001h,0B5h,003h,000h,001h,0BDh,002h,0FDh,003h,000h,003h,0B5h
+    Byte            002h,000h,001h,0BDh,001h,0FDh,002h,000h,001h,0FDh,001h,0BDh,001h,0B5h,003h,000h
+    Byte            001h,0B5h,001h,0FDh,001h,000h,002h,0FDh,002h,0B5h,002h,000h,001h,0FDh,001h,0BDh
+    Byte            001h,000h,001h,0B5h,001h,000h,001h,0B5h,001h,000h,0FFh,001h,0B5h,003h,000h,002h
+    Byte            0FDh,001h,000h,001h,0FDh,005h,000h,002h,0B5h,001h,0BDh,003h,0FDh,001h,000h,001h
+    Byte            0BDh,001h,0B5h,003h,000h,001h,0B5h,001h,0FDh,001h,000h,002h,0FDh,002h,0B5h,002h
+    Byte            000h,002h,0FDh,001h,000h,001h,0B5h,001h,000h,001h,0B5h,001h,000h,0FFh,004h,0B5h
+    Byte            004h,0FDh,002h,000h,001h,0B5h,003h,000h,001h,0B5h,002h,0FDh,003h,000h,001h,0FDh
+    Byte            001h,0B5h,002h,000h,002h,0B5h,004h,0FDh,002h,0B5h,002h,000h,002h,0FDh,001h,000h
+    Byte            001h,0B5h,001h,000h,001h,0B5h,001h,000h,0FFh,001h,000h,002h,0B5h,001h,000h,001h
+    Byte            0BDh,003h,0FDh,002h,000h,005h,0B5h,001h,000h,004h,0FDh,001h,0BDh,005h,0B5h,003h
+    Byte            0FDh,002h,000h,003h,0B5h,003h,0FDh,004h,0B5h,0FFh,029h,000h,0FFh,009h,000h,001h
+    Byte            0FDh,010h,000h,001h,0FDh,006h,000h,005h,0B5h,003h,000h,0FFh,001h,000h,004h,0FDh
+    Byte            003h,000h,003h,0FDh,00Eh,000h,003h,0FDh,005h,000h,005h,0B5h,003h,000h,0FFh,001h
+    Byte            000h,004h,0FDh,002h,000h,005h,0FDh,00Dh,000h,003h,0FDh,005h,000h,005h,0B5h,003h
+    Byte            000h,0FFh,001h,000h,004h,0FDh,003h,000h,003h,0FDh,00Eh,000h,003h,0FDh,005h,000h
+    Byte            005h,0B5h,003h,000h,0FFh,009h,000h,001h,0FDh,005h,000h,003h,0B5h,010h,000h,002h
+    Byte            0B5h,005h,000h,0FFh,00Fh,000h,003h,0B5h,017h,000h,0FFh,000h

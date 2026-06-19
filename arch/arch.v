@@ -36,7 +36,7 @@ reg  [7:0]          OprOperator;
 reg  [7:0]          OprOperationBytes;
 reg  [7:0]          valueRegister;
 reg  [7:0]          op_id;
-reg  [31:0]         a, b, result, r0, r1, r2, r3;
+reg  [31:0]         a, b, result, r0, r1, r2, r3, r4, r5, r6, r7, r8;
 reg  [7:0]          ir;
 reg  [7:0]          opcode;
 reg  [7:0]          mode;
@@ -133,6 +133,10 @@ begin
                 4: val =        r1;     // Bx (b regiXter)
                 5: val =        r2;     // Cx (c/cycles regiXter)
                 6: val =        r3;     // Dx (d/dataBackup regiXter)
+                7: val =        r4;     // Ah (extra a0 regiXter)
+                8: val =        r5;     // Al (extra a1 regiXter)   
+                9: val =        r6;     // Bh (extra b1 regiXter)   
+                10:val =        r7;     // Bl (extra b2 regiXter)   
                 default: val = 0;
             endcase
         end
@@ -390,6 +394,10 @@ task ex_wrx; begin
         4: r1 =             a;  // Bx (b regiXter)
         5: r2 =             a;  // Cx (c/cycles regiXter)
         6: r3 =             a;  // Dx (d/dataBackup regiXter)
+        7: r4 =             a;  // Ah (extra a0 regiXter)
+        8: r5 =             a;  // Al (extra a1 regiXter)   
+        9: r6 =             a;  // Bh (extra b1 regiXter)   
+        10:r7 =             a;  // Bl (extra b2 regiXter)   
         default: valueRegister = 0;
     endcase
 

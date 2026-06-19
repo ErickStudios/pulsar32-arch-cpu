@@ -144,7 +144,6 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
         let v3 = parsePrimary();
         let result = (v3.value - v2.value) + v1.value;
         expect("]");
-        console.log(result);
         return ({ type: 'inm', value: result });
       }
       else if (peek().value.toUpperCase() === 'OUT') {
@@ -184,6 +183,18 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
       if (ident.value.toUpperCase() === 'DX') {
         return ({ type: 'symbol', value: 'cpu.registers.dx' });
       }
+      if (ident.value.toUpperCase() === 'AH') {
+        return ({ type: 'symbol', value: 'cpu.registers.ah' });
+      }
+      if (ident.value.toUpperCase() === 'AL') {
+        return ({ type: 'symbol', value: 'cpu.registers.al' });
+      }
+      if (ident.value.toUpperCase() === 'BH') {
+        return ({ type: 'symbol', value: 'cpu.registers.bh' });
+      }
+      if (ident.value.toUpperCase() === 'BL') {
+        return ({ type: 'symbol', value: 'cpu.registers.bl' });
+      }
       if (ctx.symbols.has(ident.value)) {
         return ({ type: 'inm', value: ctx.symbols.get(ident.value) + ctx.orgIn });
       }
@@ -209,7 +220,10 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
     if (name === 'cpu.registers.bx') {return 4;}
     if (name === 'cpu.registers.cx') {return 5;}
     if (name === 'cpu.registers.dx') {return 6;}
-
+    if (name === 'cpu.registers.ah') {return 7;}
+    if (name === 'cpu.registers.al') {return 8;}
+    if (name === 'cpu.registers.bh') {return 9;}
+    if (name === 'cpu.registers.bl') {return 10;}
   }
   function operandParse(op) {
     if (op.toUpperCase() == "SP") return { type: 'stack', bind: 2 };

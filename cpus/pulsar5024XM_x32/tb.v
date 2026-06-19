@@ -67,6 +67,7 @@ reg  [15:0] fs0_byte_to_read = 0;
 reg  [3:0]  fs0_read_stage = 0;
 reg  [1:0]  fs0_status_lh = 0;
 reg  [31:0] fs0_byte_exactly = 0;
+reg  [1:0]  fs0_count_quedread = 0;
 
 // ================= SIMULATED VIDEO ADAPTER =================
 reg  [7:0]  pix_x;
@@ -204,6 +205,7 @@ always @(posedge clk) begin
     if (reset) begin
         ready <= 1;
         flag_first_time <= 0;
+        fs0_status_lh <= 0;
         boot_loading <= 1;     // Al resetear, volvemos a activar la carga
         boot_state <= 0;
         iflash_ptr <= 0;
@@ -306,14 +308,15 @@ always @(posedge clk) begin
     else if (dev_wrt_en && dev_wrt_addr == 10) begin
       if (fs0_status_lh == 0) begin
         fs0_status_lh <= 1;
-        fs0_sector_to_read <= dev_wrt_val;
+        fs0_sector_to_read = dev_wrt_val;
       end
       else if (fs0_status_lh == 1) begin
         fs0_status_lh <= 0;
-        fs0_sector_to_read <= (fs0_sector_to_read << 8) | dev_wrt_val;
-        anull_all_fs0 <= 1;
+        fs0_sector_to_read = (fs0_sector_to_read << 8) | dev_wrt_val;
+        fs0_read_stage <= 0;
         fs0_byte_to_read <= 0;
-        if (!uut.quiet | debug_show_events) $strobe("%d (%8x) HARDWARE   FS0 READBF %0d:%0d",uut.pc, uut.pc, fs0_mmfs_to_read, fs0_sector_to_read);
+        fs0_count_quedread <= 2;
+        if (!uut.quiet | debug_show_events) $display("%d (%8x) HARDWARE   FS0 READBF %0d:%0d",uut.pc, uut.pc, fs0_mmfs_to_read, fs0_sector_to_read);
       end
     end
     else if (dev_wrt_en && dev_wrt_addr == 11) begin
@@ -325,6 +328,12 @@ always @(posedge clk) begin
         fs0_status_lh <= 0;
         fs0_mmfs_to_read = (fs0_mmfs_to_read << 8) | dev_wrt_val;
       end
+    end
+    else if (fs0_count_quedread != 0) begin
+      if (fs0_count_quedread == 1) begin
+        anull_all_fs0 <= 1;
+      end
+      fs0_count_quedread = fs0_count_quedread - 1;
     end
     else if (anull_all_fs0) begin
         if (fs0_byte_to_read >= 511) begin
@@ -414,7 +423,7 @@ initial begin
     #1  dev4_enable = 1;
     #2  dev4_enable = 0;*/
 
-    #2000000 $finish;
+    #200000000 $finish;
 
 end
 `ifdef simSimi
