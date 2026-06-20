@@ -190,58 +190,21 @@ MACHINES = {
 # =========================================================
 # MAIN
 # =========================================================
-
 def main():
-
-    parser = argparse.ArgumentParser(
-        prog="pqemu",
-        description="Pulsar QEMU-like monitor"
-    )
-
-    parser.add_argument(
-        "-pc",
-        required=True,
-        choices=MACHINES.keys(),
-        help="Machine type"
-    )
-
-    parser.add_argument(
-        "-mx",
-        action="store_true",
-        help="out to the file"
-    )
-
-    parser.add_argument(
-        "-cpu",
-        default="cpu",
-        help="vvp target"
-    )
-
-    parser.add_argument(
-        "--raw",
-        action="store_true",
-        help="Show raw trace lines"
-    )
-
+    parser = argparse.ArgumentParser(prog="pqemu", description="Pulsar QEMU-like monitor")
+    parser.add_argument("-pc", required=True, choices=MACHINES.keys(), help="Machine type")
+    parser.add_argument("-mx", action="store_true", help="out to the file")
+    parser.add_argument("-cpu", default="cpu", help="vvp target")
+    parser.add_argument("--raw", action="store_true", help="Show raw trace lines")
     args = parser.parse_args()
-
-    # -----------------------------------------------------
-    # CREATE MACHINE
-    # -----------------------------------------------------
 
     machine = MACHINES[args.pc]()
     vvip = Object()
     mx = bool(args.mx)
-    if hasattr(machine, "__envinit__"): vvip = machine.__envinit__()
+    if hasattr(machine, "__envinit__"): 
+        vvip = machine.__envinit__()
 
-    #print(f"[PQEMU] Starting machine: {args.pc}")
-    #print(f"[PQEMU] Launching: vvp {args.cpu}")
-    #print()
-
-    # -----------------------------------------------------
-    # START VVP
-    # -----------------------------------------------------
-
+    # Lanzar subproceso del simulador Verilog
     proc = subprocess.Popen(
         ["vvp", args.cpu],
         stdout=subprocess.PIPE,
@@ -251,61 +214,60 @@ def main():
         bufsize=1
     )
 
-    # -----------------------------------------------------
-    # STREAM TRACE
-    # -----------------------------------------------------
+    f = open("pc.log.vm", "w") if mx else None
+    with open("hkey_kbad_pc.stat.vm", "w") as al:
+        al.write("0000000000000000000000000000000000000000")
 
-    if mx: f = open("pc.log.vm", "w")
-    al = open("hkey_kbad_pc.stat.vm", "w")
+    # =====================================================
+    # HILO DE TRABAJO: Lee VVP en segundo plano
+    # =====================================================
+    def vvp_reader_thread():
+        try:
+            for line in proc.stdout:
+                if mx and f:
+                    f.write(line)
+                    f.flush()
 
-    al.write("0000000000000000000000000000000000000000")
+                line_str = line.rstrip()
+                if args.raw:
+                    print("[RAW]", line_str)
 
-    try:
+                trace = parse_trace(line_str)
+                if trace is None:
+                    continue
 
-        def update_monitor():
-            if hasattr(vvip, "monitor") and vvip.monitor.winfo_exists():
-                try:
-                    vvip.monitor.update()
-                    
-                    vvip.monitor.after(2, update_monitor)
-                except tkinter.TclError:
-                    return
-                
-        update_monitor()
+                machine.handle_trace(trace)
+        except Exception as e:
+            print(f"\n[ERROR EN HILO VVP]: {e}")
+        finally:
+            if f: f.close()
 
-        for line in proc.stdout:
-            if mx: f.write(line)
-            if mx: f.flush()
+    # Arrancamos el hilo lector de VVP de forma asíncrona
+    reader = threading.Thread(target=vvp_reader_thread, daemon=True)
+    reader.start()
 
-            line = line.rstrip()
+    # =====================================================
+    # HILO PRINCIPAL: Refresco periódico de pantalla
+    # =====================================================
+    def update_monitor():
+        if hasattr(vvip, "monitor"):
+            try:
+                machine.refresh_monitor(vvip)
+                # Volvemos a agendar el refresco gráfico cada 16ms (~60 FPS)
+                vvip.monitor.after(16, update_monitor)
+            except tkinter.TclError:
+                return
 
-            if hasattr(vvip, "monitor"):
+    # Iniciar la cola de refrescos y el bucle nativo de Tkinter
+    vvip.monitor.after(16, update_monitor)
+    
+    # El hilo principal se queda aquí escuchando clicks y pintando píxeles de forma nativa
+    vvip.monitor.mainloop() 
 
-                try:
-                    vvip.monitor.update()
-                    machine.refresh_monitor(vvip)
-                except tkinter.TclError:
-                    break
-
-            if args.raw:
-                pass #print("[RAW]", line)
-
-            trace = parse_trace(line)
-
-            if trace is None:
-                continue
-
-            machine.handle_trace(trace)
-
-    except KeyboardInterrupt:
-
+    # Al cerrar la ventana, liquidar el proceso de simulación
+    if proc.poll() is None:
         proc.kill()
-
     proc.wait()
-
-# =========================================================
-# ENTRY
-# =========================================================
 
 if __name__ == "__main__":
     main()
