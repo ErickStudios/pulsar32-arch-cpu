@@ -515,10 +515,11 @@ task ex_opr; begin
     if (!quiet) $write(" OPR ");
 
     if (!quiet) $write("%s ", castToDebug(operationModes[7:4]));
-    if (!quiet) $write("%s %0d\n", castToDebug(operationModes[3:0]), OprOperator);
+    if (!quiet) $write("%s %0d", castToDebug(operationModes[3:0]), OprOperator);
 
     if (OprOperator != 8'h08) operateInstant(operationModes[7:4],OprOperationBytes, a);
     if (OprOperator != 8'h08) operateInstant(operationModes[3:0],OprOperationBytes, b);
+    if (!quiet) $write(" %0d %0d\n", a,b);
 
     case (OprOperator) 
         8'h08: begin

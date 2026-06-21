@@ -50,11 +50,48 @@ class Pulsar5024XM_x32:
         )
         label.pack()
         vvip.label = label
-        
         vvip.monitor = monitor
         vvip.mset = monitorSettings
         
         self.monitor = monitorSettings
+
+        vvip.key_states = ["0"] * 40 
+
+        # 1234567890
+        # ABCDEFGHIJ
+        # KLMNOPQRST ^
+        #   UVWXYZ  <v>
+        vvip.key_map = {
+            '1':0,'2':1,'3':2,'4':3,'5':4,'6':5,'7':6,'8':7,'9':8,'0':9,
+            'A':10,'B':11,'C':12,'D':13,'E':14,'F':15,'G':16,'H':17,'I':18,'J':19,
+            'K':20,'L':21,'M':22,'N':23,'O':24,'P':25,'Q':26,'R':27,'S':28,'T':29,
+            '^':30,'U':31,'V':32,'W':33,'X':34,'Y':35,'Z':36,'<':37,'v':38,'>':39
+        }
+
+        def on_key_press(event):
+            key = event.char
+            if key in vvip.key_map:
+                idx = vvip.key_map[key]
+                if vvip.key_states[idx] == "0":
+                    vvip.key_states[idx] = "1"
+                    write_key_file()
+
+        def on_key_release(event):
+            key = event.char
+            if key in vvip.key_map:
+                idx = vvip.key_map[key]
+                if vvip.key_states[idx] == "1":
+                    vvip.key_states[idx] = "0"
+                    write_key_file()
+
+        def write_key_file():
+            content = "\n".join(vvip.key_states)
+            with open("hkey_kbad_pc.stat", "w") as al:
+                al.write(content)
+
+        monitor.bind("<KeyPress>", on_key_press)
+        monitor.bind("<KeyRelease>", on_key_release)
+        # -------------------------------------------------------------
 
         return vvip
 
@@ -204,6 +241,9 @@ def main():
     if hasattr(machine, "__envinit__"): 
         vvip = machine.__envinit__()
 
+    with open("hkey_kbad_pc.stat", "w") as al:
+            al.write("\n".join(["0"] * 40))
+
     # Lanzar subproceso del simulador Verilog
     proc = subprocess.Popen(
         ["vvp", args.cpu],
@@ -215,8 +255,6 @@ def main():
     )
 
     f = open("pc.log.vm", "w") if mx else None
-    with open("hkey_kbad_pc.stat.vm", "w") as al:
-        al.write("0000000000000000000000000000000000000000")
 
     # =====================================================
     # HILO DE TRABAJO: Lee VVP en segundo plano
@@ -231,7 +269,7 @@ def main():
                 line_str = line.rstrip()
                 if args.raw:
                     print("[RAW]", line_str)
-
+                
                 trace = parse_trace(line_str)
                 if trace is None:
                     continue
@@ -257,6 +295,11 @@ def main():
                 vvip.monitor.after(16, update_monitor)
             except tkinter.TclError:
                 return
+
+    vvip.monitor.protocol("WM_DELETE_WINDOW", lambda:[
+        proc.kill(), 
+        vvip.monitor.destroy()
+    ])
 
     # Iniciar la cola de refrescos y el bucle nativo de Tkinter
     vvip.monitor.after(16, update_monitor)

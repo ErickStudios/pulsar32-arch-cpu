@@ -39,7 +39,8 @@ _devices_vector:
     Dword           up_button_irq ; vector del boton 'Up'
     Dword           down_button_irq ; vector del boton 'Down'
     Dword           cassete_irq ; vector del dispositivo de la disquetera de cartuchos del mmfs0 (mounted/maped FileSystem 0)
-    Dword           0,0,0,0,0,0,0,0,0,0,0
+    Dword           INT5_irq ; controlador de teclado
+    Dword           0,0,0,0,0,0,0,0,0,0
     ; 10h-20h
     Dword           VideoServices ; putchar para imprimir un caracter
     Dword           put_msg ; print para imprimir un texto
@@ -59,7 +60,7 @@ _devices_vector:
 ;   UVWXYZ  <v>
 ;
 char_map:
-    Byte            49,50,51,52,53,54,55,56,57,58,48    ; 1-0
+    Byte            49,50,51,52,53,54,55,56,57,48       ; 1-0
     Byte            65,66,67,68,69,70,71,72,73,74       ; A-J
 	Byte            75,76,77,78,79,80,81,82,83,84,1     ; K-T & Up
 	Byte            85,86,87,88,89,90,2,3,4             ; U-Z & Left/Right & Down
@@ -563,6 +564,8 @@ bootmsg:
     Byte     'b', 'o', 'o', 't', 'i', 'n', 'g', ' ', 'f', 'r', 'o',  'm', ' ', 'R', 'O', 'M', 10, 0
 disk_inserted:
     Byte     'c','a','s','s','e','t','e',' ','i','n','s','e','r','t','e','d', 10, 0
+key_pressed:
+    Byte     'K', 'E', 'Y', ' ', 'P', 'R', 'E', 'S', 'S', 'E', 'D', 10, 0
 
 ; ===========================================
 ;           CASSETE FUNCS
@@ -626,6 +629,28 @@ cassete_external_sector:
     Assume-Fill 0x51FF
 
 ; ===========================================
+;           Mark3302 Datas
+;
+; datos para el KY1 del controlador Markarian 3302
+; que maneja el teclado integrado obligatorio de la
+; SBC, estos datos son escritos por el hardware 
+; devuelta al recibir algo externo que tiene que ver
+; con controladores KY de el Markarian 3302
+;
+; ===========================================
+
+    Assume-Fill 5202h
+; ========== dispositivo KY que envio el int ===========
+MA3302_Current_KY:
+    Byte            0
+; ========== indice de la tecla que se actualizo ===========
+MA3302_KY1_KINDEX:
+    Byte            0
+; ========== el estado de la tecla ===========
+MA3302_KY1_KSTAT:
+    Byte            0
+
+; ===========================================
 ; funcion interna de cassete no el de para 
 ; obtener funciones si no datos o mas cosas
 ;
@@ -671,6 +696,64 @@ cassete_fnc_end:
     Add-Dword-Sp-Inm 0
     Lea-Dword       Sp
     Jmp-Dword-Clasic Sp
+
+; ===========================================
+;           Mark3302 INT
+;
+; el controlador Markarian 3302 soldado a la placa
+; base obligatorio, permite el manejo del KY1
+; (mas conocido como el puerto del teclado simple de
+; teletipo para soporte basico y mecanografia, que
+; el KY1 sirve para los 2 tanto electronica como para
+; editar el teletipo serial COM1 aunque es una 
+; caracteristica opcional que no siempre se implemente
+; en todas las versiones de este firmware)
+;
+; en revisiones futuras de esta SBC se podra manejar mas 
+; controladores tipo KY aunque solo soporte KY1
+;
+; ===========================================
+
+INT5_irq:
+    Push-Dword      Px          ; guardar
+    Push-Dword      Out         ; guardar
+    Push-Dword      Ax          ; guardar
+    Push-Dword      Bx          ; guardar
+    Push-Dword      Cx          ; guardar
+
+    Lea-Dword       MA3302_Current_KY ; direccion
+    Mov-Byte                    ; obtener byte
+    Ror-Byte        Ax, Out     ; guardar
+
+    ; MA3302.KY1 Controller - Controlador de teclado
+    Cmp-Byte-Reg-Inm Ax, 02Ch ; controlador de KY1
+    Jmp-Dword-Zero  M3KY1_Hand ; manejar
+
+INT5_end:
+    Ror-Dword       Cx, Sp      ; recuperar
+    Ror-Dword       Bx, Sp      ; recuperar
+    Ror-Dword       Ax, Sp      ; recuperar
+    Ror-Dword       Out, Sp     ; recuperar
+    Ror-Dword       Px, Sp      ; recuperar
+    Jmp-Dword-Clasic Sp         ; retorno
+
+M3KY1_Hand:
+    Lea-Dword       MA3302_KY1_KINDEX ; indice
+    Mov-Byte                    ; obtener
+    Ror-Byte        Bx, Out     ; copiar indice
+    Ror-Dword       Cx, char_map ; mapa
+    Push-Dword      Cx
+    Push-Dword      Bx
+    Add-Dword-Sp-Sp             ; añadir
+    Ror-Dword       Cx, Out     ; copiar
+    Lea-Dword       Cx          ; direccion
+    Mov-Byte                    ; obtener
+
+    Ror-Byte        Ax, 0Eh     ; teletipo
+    Ror-Byte        Bx, Out     ; obtener byte
+    Int-Byte        10h         ; servicio
+    
+    Jmp-Dword-Clasic INT5_end   ; finalizar
 
 Assume-Fill 0x7200
 

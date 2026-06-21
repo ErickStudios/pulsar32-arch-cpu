@@ -25,7 +25,8 @@ module top(
     input wire          dev1_enable,
     input wire          dev2_enable,
     input wire          dev3_enable,
-    input wire          dev4_enable
+    input wire          dev4_enable,
+    input wire          MA3302_enable
 );
 `endif
 
@@ -33,6 +34,8 @@ module top(
 `ifdef simSimi
 reg         clk = 0;
 reg         reset = 1;
+reg         kstatbuff [0:39]; 
+reg         kstatbools [0:39];
 always #1   clk = ~clk;
 `endif
 reg         ready = 1;
@@ -41,11 +44,11 @@ reg [7:0]   flash_space [0:96000];
 wire        irq;
 wire [31:0] irq_addr;
 wire [7:0]  irq_data;
-wire        irq1, irq2, irq3, irq4, irq5;
-wire [31:0] addr1, addr2, addr3, addr4, addr5;
-wire [7:0]  data1, data2, data3, data4, data5;
+wire        irq1, irq2, irq3, irq4, irq5, irq6;
+wire [31:0] addr1, addr2, addr3, addr4, addr5, addr6;
+wire [7:0]  data1, data2, data3, data4, data5, data6;
 wire        irq_ack;
-wire        irq_ack1, irq_ack2, irq_ack3, irq_ack4, irq_ack5;
+wire        irq_ack1, irq_ack2, irq_ack3, irq_ack4, irq_ack5, irq_ack6;
 reg  [7:0]  selectec_dev;
 reg  [7:0]  firmware_status = 0;
 reg  [7:0]  modifier_01 = 0;
@@ -68,6 +71,13 @@ reg  [3:0]  fs0_read_stage = 0;
 reg  [1:0]  fs0_status_lh = 0;
 reg  [31:0] fs0_byte_exactly = 0;
 reg  [1:0]  fs0_count_quedread = 0;
+
+// ================= MA3302 CONTROLLER =================
+
+reg  [7:0]  MA3302_stag = 0;
+reg  [7:0]  MA3302_stags = 0;
+reg  [7:0]  MA3302_KY1_Ki = 0;
+reg         MA3302_KY1_Ks = 0;
 
 // ================= SIMULATED VIDEO ADAPTER =================
 reg  [7:0]  pix_x;
@@ -92,12 +102,15 @@ reg         mrb;
 reg         mwx;
 
 assign mwa =
-    boot_loading ? iflash_ptr :
-    modifier_01 == 0 ?  32'h7FFF :
-    modifier_01 == 1 ?  4095 :
-    modifier_01 == 2 ?  4096 :
-    modifier_01 == 3 ?  32'h2FFF :
-    modifier_01 == 4 ?  32'h4FFF + fs0_byte_to_read :
+    boot_loading ? iflash_ptr :     // donde se esta flasheado el firmware
+    modifier_01 == 0 ?  32'h7FFF :  // ya no usado
+    modifier_01 == 1 ?  4095 :      // ya no usado
+    modifier_01 == 2 ?  4096 :      // ya no usado
+    modifier_01 == 3 ?  32'h2FFF :  // el comando que el cassete quiere enviar
+    modifier_01 == 4 ?  32'h4FFF + fs0_byte_to_read : // donde esta escribiendo
+    modifier_01 == 5 ?  32'h5202 :  // cuando se activa un dispositivo del MA3302
+    modifier_01 == 6 ?  32'h5203 :  // la tecla que se actualizo del KY1 de MA3302
+    modifier_01 == 7 ?  32'h5204 :  // el estado de la tecla que se actualizo del KY1 de MA3302
                         32'h00000000;
 
 assign mra = mwa;
@@ -112,12 +125,14 @@ reg         dev1_enable = 0;
 reg         dev2_enable = 0;
 reg         dev3_enable = 0;
 reg         dev4_enable = 0;
+reg         MA3302_enable = 0;
 `endif
 reg         cassete_enable = 0;
 reg  [7:0]  dev1_data = 0;
 reg  [7:0]  dev2_data = 0;
 reg  [7:0]  dev3_data = 0;
 reg  [7:0]  dev4_data = 0;
+reg  [7:0]  MA3302_data = 0;
 reg  [7:0]  cassete_data = 0;
 
 // ================= SERIAL COM1 PORT =================
@@ -132,13 +147,15 @@ assign      irq =   irq1 |
                     irq2 |
                     irq3 |
                     irq4 |
-                    irq5;
+                    irq5 |
+                    irq6 ;
 assign      irq_addr =
                     irq1 ? addr1 :
                     irq2 ? addr2 :
                     irq3 ? addr3 :
                     irq4 ? addr4 :
                     irq5 ? addr5 :
+                    irq6 ? addr6 :
                     32'b0;
 assign      irq_data =
                     irq1 ? data1 :
@@ -146,12 +163,14 @@ assign      irq_data =
                     irq3 ? data3 :
                     irq4 ? data4 :
                     irq5 ? data5 :
+                    irq6 ? data6 :
                     8'b0;
 assign irq_ack1 = irq_ack & irq1;
 assign irq_ack2 = irq_ack & irq2;
 assign irq_ack3 = irq_ack & irq3;
 assign irq_ack4 = irq_ack & irq4;
 assign irq_ack5 = irq_ack & irq5;
+assign irq_ack6 = irq_ack & irq6;
 
 // ================= CHIP BUS =================
 // el procesador uninucleo de la pc que procesa
@@ -199,6 +218,40 @@ device #(.BASE_ADDR(32'h3)) downButton
     (.clk(clk),.reset(reset),.enable(dev4_enable),.data_in(dev4_data),.irq(irq4),.irq_addr(addr4),.irq_data(data4),.irq_ack(irq_ack4),.wrt_en(dev_wrt_en),.wrt_addr(dev_wrt_addr),.wrt_val(dev_wrt_val));
 device #(.BASE_ADDR(32'h4)) cassete
     (.clk(clk),.reset(reset),.enable(cassete_enable),.data_in(cassete_data),.irq(irq5),.irq_addr(addr5),.irq_data(data5),.irq_ack(irq_ack5),.wrt_en(dev_wrt_en),.wrt_addr(dev_wrt_addr),.wrt_val(dev_wrt_val));
+device #(.BASE_ADDR(32'h5)) MA3302
+    (.clk(clk),.reset(reset),.enable(MA3302_enable),.data_in(MA3302_data),.irq(irq6),.irq_addr(addr6),.irq_data(data6),.irq_ack(irq_ack6),.wrt_en(dev_wrt_en),.wrt_addr(dev_wrt_addr),.wrt_val(dev_wrt_val));
+
+integer kstatbooli;
+
+always @(posedge clk) begin
+
+    for (kstatbooli = 0; kstatbooli < 40; kstatbooli = kstatbooli + 1) begin
+        if (kstatbuff[kstatbooli] != kstatbools[kstatbooli]) begin
+            kstatbools[kstatbooli] <= kstatbuff[kstatbooli];
+            //MA3302_enable <= 1;
+            modifier_01 <= 5;
+            mwv <= 8'h2C;
+            mwb <= 1;
+            MA3302_stag = 1;
+            MA3302_KY1_Ki = kstatbooli;
+            MA3302_KY1_Ks = kstatbuff[kstatbooli];
+            kstatbooli = 44;
+            $display("%d (%8x) HARDWARE   KY1 KPRESS %0d", uut.pc - 1, uut.pc, kstatbooli);
+        end
+    end
+end
+
+initial begin
+    for (kstatbooli = 0; kstatbooli < 40; kstatbooli = kstatbooli + 1) begin
+        kstatbools[kstatbooli] = 0;
+        kstatbuff[kstatbooli] = 0;
+    end
+
+    forever begin
+        $readmemb("hkey_kbad_pc.stat", kstatbuff);
+        #10000;
+    end
+end
 
 always @(posedge clk) begin
 
@@ -262,6 +315,47 @@ always @(posedge clk) begin
     end
     else begin
     last_dev_wrt_en <= dev_wrt_en;
+    
+    if (MA3302_stag != 0) begin
+        case (MA3302_stag)
+          1: begin
+            if (MA3302_stags < 4) MA3302_stags = MA3302_stags + 1;
+            else begin
+                MA3302_stags = 0;
+                MA3302_stag = MA3302_stag + 1;
+            end
+          end
+          2: begin
+            if (MA3302_stags == 0) begin
+                modifier_01 <= 6;
+                mwv <= MA3302_KY1_Ki;
+                mwb <= 1;
+                MA3302_stags = MA3302_stags + 1;
+            end
+            else if (MA3302_stags < 4) MA3302_stags = MA3302_stags + 1;
+            else begin
+                MA3302_stags = 0;
+                MA3302_stag = MA3302_stag + 1;
+            end
+          end
+          3: begin
+            if (MA3302_stags == 0) begin
+                modifier_01 <= 7;
+                mwv <= MA3302_KY1_Ks;
+                mwb <= 1;
+                MA3302_stags = MA3302_stags + 1;
+            end
+            else if (MA3302_stags < 4) MA3302_stags = MA3302_stags + 1;
+            else begin
+                MA3302_enable <= 1;
+                MA3302_stags = 0;
+                MA3302_stag = 0;
+            end
+          end
+        endcase
+    end
+
+    if (MA3302_enable) MA3302_enable <= 0;
 
     // proceso principal de paralelo de la SBC
     // para procesar los dispositivos
