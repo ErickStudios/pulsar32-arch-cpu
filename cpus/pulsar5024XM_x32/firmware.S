@@ -47,7 +47,7 @@ _devices_vector:
     Dword           memcpy  ; memory copping para copiar un bloque de memoria a otro
     Dword           _init   ; reset the pc para reiniciar la pc
     Dword           0
-    Dword           readkey
+    Dword           misc_int ; misc int para funciones mixtas
     Dword           0,0,0,0,0,0,0,0,0,0,0
     ; 21h-30h
     Dword           0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
@@ -118,14 +118,14 @@ STACKSTART:
 ;
 _init:
 P0:
-    Cmp-Byte-Inm-Inm 4Ch, 2Bh       ; comparar valores
-    Jmp-Dword-Zero  P0              ; reintentar hasta que lo procese bien
-    Jmp-Dword-Less  P0              ; COMO VA A SER MENOR ESE NUMERO HDP!!
+    cmpsb           4Ch, 2Bh        ; comparar valores
+    jz              P0              ; reintentar hasta que lo procese bien
+    jl              P0              ; COMO VA A SER MENOR ESE ERO HDP!!
 P1:
     Ror-Dword       Ss, STACKSTART  ; configurar stack
-    Cmp-Dword-Reg-Inm Ss, STACKSTART ; comparar si funciona
-    Jmp-Dword-Zero  P2              ; siguiente etapa
-    Jmp-Dword-Clasic P1             ; si se configuro
+    cmpsd           ss, STACKSTART  ; comparar si funciona
+    jz              P2              ; siguiente etapa
+    jmp             P1              ; si se configuro
 P2:
     Lea-dword       firmware_on_flag
     Out-Byte        0
@@ -140,11 +140,11 @@ P2:
     Ror-Byte        Ax, 0Eh     ; funcion
     Ror-Byte        Bx, 1       ; caracter
     Int-Byte        10h         ; interrupcion
-    Jmp-Dword-Call  fixSerial   ; si no lo sabian si mandas un caracter en estado cuando
+    call            fixSerial   ; si no lo sabian si mandas un caracter en estado cuando
+    call            fixSerial   ; arregla la serial
 
-    Jmp-Dword-Call  fixSerial   ; arregla la serial
     Lea-Dword       bootmsg     ; manda el mensaje
-    Jmp-Dword-Call  put_msg     ; pone el mensaje
+    call            put_msg     ; pone el mensaje
     Lea-dword       firmware_on_flag
     Out-Byte        1
     Lea-Dword       sga_row_mmio
@@ -153,7 +153,7 @@ P2:
     Out-Byte        45
     Lea-Dword       sga_data_mmio
     Out-Byte        0x22
-    Jmp-Word-Clasic C1
+    jmp             C1
 
 ; ===========================================
 ; cuando el firmware espera a cargar el sector
@@ -161,7 +161,7 @@ P2:
 ;
 C1:
     Lea-Dword       Px
-    Jmp-Word-Clasic C2
+    jmp             C2
 C2:
     Lea-Dword       cassete_selected_mmfs   ; la direccion
     Out-Byte        0                       ; parte alta
@@ -181,37 +181,61 @@ C3:
     Lea-Dword       cassete_readed_sector_finish ; la direccion
     Mov-Byte                    ; mover byte
     Push-Byte       Out         ; leer
-    Cmp-Byte-Inm-Sp 1           ; verificar
-    Jmp-Word-Zero   C4          ; se logro leer
-    Jmp-Word-Clasic C3          ; salta
+    cmpsb           1, Sp           ; verificar
+    jz              C4          ; se logro leer
+    jmp             C3          ; salta
 C4:
-        Jmp-Word-Clasic cassete_external_sector ; salta al sector el codigo del bootloader
+    jmp             cassete_external_sector ; salta al sector el codigo del bootloader
                                             ; de 512 bytes
 
 fixSerial:
     Ror-Byte        Ax, 0Eh
     Ror-Byte        Bx, 20h
     Int-Byte        10h
-    Jmp-Dword-Clasic Sp         ; regresar
+    jmp             Sp         ; regresar
+
+; ===========================================
+;           MA3302/IO/MISC INT
+;
+; funcion del controlador MA3302 y asociados,
+; junto con funciones de I/O y otras funciones
+; mixtas que llegaran en el futuro (16h)
+;
+;   Ax: 01h - MA3302 KY1 keyget:
+;       Ah-Byte: El Caracter ASCII de la tecla
+;                sera retornado en este registro
+;                asegurese de guardar su contenido
+;                antes de usar esta funcion
+;
+;
+; ===========================================
+
+misc_int:
+    ; MA3302 KY1 keyget - Leer el teclado
+    cmpsb           Ax, 01h    ; comparar
+    jz              readkey     ; ejecutar
+
+misc_int_end:
+    jmp             Sp
 
 keybuf_empty:
-    Lea-Dword       KEYB_SHEAD
-    Mov-Byte
-    Ror-Byte        Al, Out
-    Lea-Dword       KEYB_STAIL
-    Mov-Byte
-    Ror-Byte        Ah, Out
-    Push-Byte       Al
-    Push-Byte       Ah
-    Cmp-Byte-Sp-Sp
-    Jmp-Dword-Clasic Sp
+    Lea-Dword       KEYB_SHEAD  ; direccion
+    Mov-Byte                    ; obtener
+    Ror-Byte        Al, Out     ; guardar
+    Lea-Dword       KEYB_STAIL  ; direccion
+    Mov-Byte                    ; obtener
+    Ror-Byte        Ah, Out     ; guardar
+    Push-Byte       Al          ; head
+    Push-Byte       Ah          ; tail
+    Cmp-Byte-Sp-Sp              ; comparar
+    jmp             Sp         ; retornar
 
 readkey_isempty:
     Ror-Byte        Ah, 0       ; el resultado si no esta
-    Jmp-Dword-Clasic readkey_end ; finalizar
+    jmp             readkey_end ; finalizar
 readkey:
-    Jmp-Dword-Call  keybuf_empty ; verificar si el teclado esta vacio
-    Jmp-Dword-Zero  readkey_isempty ; saltar si esta vacio
+    call            keybuf_empty ; verificar si el teclado esta vacio
+    jz              readkey_isempty ; saltar si esta vacio
     Lea-Dword       KEYB_STAIL      ; leer el tail
     Mov-Byte                        ; obtener
     Ror-Byte        Al, Out         ; obtener
@@ -230,55 +254,7 @@ readkey:
     Mod-Byte-Sp-Inm KEYBUF_SIZE     ; modular
     Lea-Dword       KEYB_STAIL      ; direccion
     Out-Byte        Out             ; obtener byte
-
-readkey_end:
-    Jmp-Dword-Clasic Sp
-
-; ===========================================
-;           DISK INT
-;
-; funcion de el disco (12h)
-;
-;   Ax: 02h - Read Sector Into Memory:
-;       Bx-Word: El sector
-;       Cx-Word: El Filesystem
-;       Dx-Dword: Destino de la informacion leida
-;
-; ===========================================
-
-DiskServices:
-    ; Read Sector Into Memory - Leer sector a la memoria
-    Cmp-Byte-Reg-Inm Ax, 02h    ; comparar
-    Jmp-Dword-Zero  SECT_MEM_W   ; escribir
-
-DiskServicesEnd:
-    Jmp-Dword-Clasic Sp         ; regresar
-
-SECT_MEM_W:
-    ; obtener
-    Lea-Dword       llbasect_sect_low       ; la direccion
-    Out-Word        Bx                      ; el sector
-    Lea-Dword       llbasect_mmfs_low       ; la direccion
-    Out-Word        Cx                      ; el fs
-
-    ; el sector
-    Lea-Dword       cassete_selected_mmfs   ; la direccion
-    Push-Dword      Px                      ; guardar px
-    Lea-Dword       llbasect_mmfs_low       ; el alto
-    Mov-Byte                                ; obtener byte
-    Lea-Dword       Sp                      ; recuperar px
-    Out-Byte        Out                     ; parte alta
-    Push-Dword      Px                      ; guardar px
-    Lea-Dword       llbasect_mmfs_high      ; el bajo
-    Mov-Byte                                ; obtener byte
-    Lea-Dword       Sp                      ; recuperar px    
-    
-    Jmp-Dword-Call  readsec                 ; llamar
-    Mov             [Dword memcpy_src], Dword cassete_external_sector ; fuente
-    Mov             [Dword memcpy_dst], Dword Dx ; destino
-    Mov             [Dword memcpy_siz], Dword 512 ; tamaño
-    Int-Byte        13h                     ; el int de copiar memoria
-    Jmp-Dword-Clasic DiskServicesEnd        ; regresar
+    jmp              misc_int_end   ; terminar
 
 ; ===========================================
 ;           DISPLAY INT
@@ -308,19 +284,19 @@ SECT_MEM_W:
 
 VideoServices:
     ; TTY Write Function - Escribir un caracter
-    Cmp-Byte-Reg-Inm Ax, 0Eh    ; comparar
-    Jmp-Dword-Zero  TTY_WRITE   ; escribir
+    cmpsb            Ax, 0Eh    ; comparar
+    jz              TTY_WRITE   ; escribir
 
     ; TTY WriteMsg Function - Escribir un caracter
-    Cmp-Byte-Reg-Inm Ax, 1Eh    ; comparar
-    Jmp-Dword-Zero  VideoWapperWrtMsgCmpty ; escribir
+    cmpsb            Ax, 1Eh    ; comparar
+    jz              VideoWapperWrtMsgCmpty ; escribir
 
     ; SGA Img Push Function - Imprimir una imagen en la pantalla
-    Cmp-Byte-Reg-Inm Ax, 03h    ; comparar
-    Jmp-Dword-Zero  SGA_IMG_PUSH   ; escribir
+    cmpsb            Ax, 03h    ; comparar
+    jz              SGA_IMG_PUSH   ; escribir
 
 VideoServicesEnd:
-    Jmp-Dword-Clasic Sp         ; regresar
+    jmp              Sp         ; regresar
 
 ; ===========================================
 ; imprime una imagen
@@ -342,10 +318,10 @@ F10H_C1:
     Add-Dword-Reg-Inm Px, 1     ; ver el color
     Lea-Dword       Out         ; revisar
     Ror-Dword       Bx, Out     ; saltar
-    Cmp-Byte-Reg-Inm Ax, 00h    ; si el valor es 0
-    Jmp-Dword-Zero   F10H_CEND  ; XD?!
-    Cmp-Byte-Reg-Inm Ax, 0FFh   ; si el valor es nueva linea
-    Jmp-Dword-Zero   F10H_CNL   ; nueva linea
+    cmpsb            Ax, 00h    ; si el valor es 0
+    jz               F10H_CEND  ; XD?!
+    cmpsb            Ax, 0FFh   ; si el valor es nueva linea
+    jz               F10H_CNL   ; nueva linea
     Add-Dword-Reg-Inm Bx, 1     ; saltar al siguiente punto
     Ror-Dword       Bx, Out     ; saltar
     Mov-Byte                    ; obtener
@@ -365,20 +341,20 @@ F10H_C2:
     Push-Byte       Ah          ; a.
     Sub-Byte-Sp-Sp              ; arreglado
     Ror-Byte        Ah, Out     ; obtener
-    Cmp-Byte-Reg-Inm Ah, 0      ; comparar
+    cmpsb            Ah, 0      ; comparar
     Jmp-Dword-Greater F10H_C2   ; repetir
-    Jmp-Dword-Clasic F10H_C1    ; saltar
+    jmp              F10H_C1    ; saltar
 
 F10H_CEND:
     Lea-Dword         Sp        ; xd
-    Jmp-Dword-Clasic VideoServicesEnd   ; regresar
+    jmp              VideoServicesEnd   ; regresar
 
 F10H_CNL:
     Add-Byte-Reg-Inm Dx, 1      ; añadir
     Ror-Byte        Dx, Out     ; obtener
     Ror-Byte        Cx, Bh      ; cargar
 
-    Jmp-Dword-Clasic F10H_C1            ; regresar
+    jmp              F10H_C1            ; regresar
 
 ; ========== datos temporales de el dibujado de la imagen ==========
 SGA_BYTE_SAVEDA:    Byte 0      ; guardado
@@ -390,7 +366,7 @@ SGA_IMG_X_ORIGN:    Byte 0      ; guardado
 VideoWapperWrtMsgCmpty:
     Lea-Dword       Bx          ; el
     Int-Byte        11h         ; el int de put_msg
-    Jmp-Dword-Clasic VideoServicesEnd   ; regresar
+    jmp              VideoServicesEnd   ; regresar
 
 ; ===========================================
 ; manda un caracter a la consola serial
@@ -400,7 +376,7 @@ TTY_WRITE:
     Lea-Dword       com1_new_mmio ; el caracter a mandar
     Out-Byte        Bx          ; mandar
     Lea-Dword       Sp          ; restaurar la direccion
-    Jmp-Dword-Clasic VideoServicesEnd   ; regresar
+    jmp              VideoServicesEnd   ; regresar
 
 ; ===========================================
 ; pone un mensaje en la consola serial
@@ -431,14 +407,60 @@ put_msg_loop:
     Push-Dword      Px          ; guarda la dword
     Add-Dword-Sp-Inm 1          ; suma la direccion de memoria
     Lea-Dword       Out         ; obtiene dword
-    Jmp-Dword-Clasic put_msg_loop ; salta
+    jmp              put_msg_loop ; salta
     
 ; ===========================================
 ; el final del mensaje
 ;
 put_msg_end:
     Lea-Dword       Sp          ; lee la dword
-    Jmp-Dword-Clasic Sp         ; regresar
+    jmp              Sp         ; regresar
+
+; ===========================================
+;           DISK INT
+;
+; funcion de el disco (12h)
+;
+;   Ax: 02h - Read Sector Into Memory:
+;       Bx-Word: El sector
+;       Cx-Word: El Filesystem
+;       Dx-Dword: Destino de la informacion leida
+;
+; ===========================================
+
+DiskServices:
+    ; Read Sector Into Memory - Leer sector a la memoria
+    cmpsb            Ax, 02h    ; comparar
+    jz              SECT_MEM_W   ; escribir
+
+DiskServicesEnd:
+    jmp              Sp         ; regresar
+
+SECT_MEM_W:
+    ; obtener
+    Lea-Dword       llbasect_sect_low       ; la direccion
+    Out-Word        Bx                      ; el sector
+    Lea-Dword       llbasect_mmfs_low       ; la direccion
+    Out-Word        Cx                      ; el fs
+
+    ; el sector
+    Lea-Dword       cassete_selected_mmfs   ; la direccion
+    Push-Dword      Px                      ; guardar px
+    Lea-Dword       llbasect_mmfs_low       ; el alto
+    Mov-Byte                                ; obtener byte
+    Lea-Dword       Sp                      ; recuperar px
+    Out-Byte        Out                     ; parte alta
+    Push-Dword      Px                      ; guardar px
+    Lea-Dword       llbasect_mmfs_high      ; el bajo
+    Mov-Byte                                ; obtener byte
+    Lea-Dword       Sp                      ; recuperar px    
+    
+    call            readsec                 ; llamar
+    Mov             [Dword memcpy_src], Dword cassete_external_sector ; fuente
+    Mov             [Dword memcpy_dst], Dword Dx ; destino
+    Mov             [Dword memcpy_siz], Dword 512 ; tamaño
+    Int-Byte        13h                     ; el int de copiar memoria
+    jmp              DiskServicesEnd        ; regresar
 
 ; ===========================================
 ;           MEMCPY FUNCTION
@@ -489,13 +511,13 @@ M3:
     Lea-Dword       memcpy_siz  ; destino
     Mov-Dword                   ; obtener dword
     Push-Dword      Out         ; poner el out
-    Cmp-Dword-Inm-Sp 0          ; compara con terminador
+    cmpsd           0, Sp          ; compara con terminador
     Jmp-Word-Zero   M4          ; si es igual terminar
     Jmp-Word-Clasic M_LOOP      ; loopear
 M4:
     Add-Dword-Sp-Inm 0          ; recuperar out
     Lea-Dword       Sp          ; recuperar px
-    Jmp-Dword-Clasic Sp         ; retorno
+    jmp              Sp         ; retorno
 
 ; ===========================================
 ;           READ SECTOR FUNCTION
@@ -540,7 +562,7 @@ RS3:
 RS4:
     Add-Dword-Sp-Inm 0          ; recuperar out
     Lea-Dword       Sp          ; recuperar px
-    Jmp-Dword-Clasic Sp         ; retorno
+    jmp              Sp         ; retorno
 
 ; ===========================================
 ;           FUNC BUTTONS
@@ -561,7 +583,7 @@ alpha_button_irq:
     Push-Dword      Px
     ; ... comming soon ...
     Lea-Dword       Sp
-    Jmp-Dword-Clasic Sp
+    jmp              Sp
 
 ; ===========================================
 ; boton 'B'
@@ -570,7 +592,7 @@ beta_button_irq:
     Push-Dword      Px
     ; ... comming soon ...
     Lea-Dword       Sp
-    Jmp-Dword-Clasic Sp
+    jmp              Sp
 
 ; ===========================================
 ; boton 'UP'
@@ -579,7 +601,7 @@ up_button_irq:
     Push-Dword      Px
     ; ... comming soon ...
     Lea-Dword       Sp
-    Jmp-Dword-Clasic Sp
+    jmp              Sp
 
 ; ===========================================
 ; boton 'DOWN'
@@ -588,7 +610,7 @@ down_button_irq:
     Push-Dword      Px
     ; ... comming soon ...
     Lea-Dword       Sp
-    Jmp-Dword-Clasic Sp
+    jmp              Sp
 
 ; ===========================================
 ;           SERIAL MMIO
@@ -711,7 +733,7 @@ cassete_irq:
     Cmp-Byte-Inm-Sp CASSETE_READ_SECTA
     Jmp-Word-Zero   cassete_fnc_read_sector
 
-    Jmp-Dword-Clasic cassete_fnc_end
+    jmp              cassete_fnc_end
 
 ; ===========================================
 ; cuando leyo un sector
@@ -719,15 +741,15 @@ cassete_irq:
 cassete_fnc_read_sector:
     Lea-Dword       cassete_readed_sector_finish
     Out-Byte        1
-    Jmp-Dword-Clasic cassete_fnc_end
+    jmp              cassete_fnc_end
 
 ; ===========================================
 ; cuando se inserto un cassete
 ;
 cassete_fnc_inserted:
     Lea-Dword       disk_inserted ; manda el mensaje
-    Jmp-Dword-Call  put_msg     ; pone el mensaje
-    Jmp-Dword-Clasic cassete_fnc_end
+    call            put_msg     ; pone el mensaje
+    jmp              cassete_fnc_end
 
 ; ===========================================
 ; fin de la funcion de cassete
@@ -737,7 +759,7 @@ cassete_fnc_end:
     Out-Byte        0
     Add-Dword-Sp-Inm 0
     Lea-Dword       Sp
-    Jmp-Dword-Clasic Sp
+    jmp              Sp
 
 ; ===========================================
 ;           Mark3302 INT
@@ -770,8 +792,8 @@ INT5_irq:
     Ror-Byte        Ax, Out     ; guardar
 
     ; MA3302.KY1 Controller - Controlador de teclado
-    Cmp-Byte-Reg-Inm Ax, 02Ch ; controlador de KY1
-    Jmp-Dword-Zero  M3KY1_Hand ; manejar
+    cmpsb            Ax, 02Ch ; controlador de KY1
+    jz              M3KY1_Hand ; manejar
 
 INT5_end:
     Ror-Dword       Ah, Sp      ; recuperar
@@ -781,7 +803,7 @@ INT5_end:
     Ror-Dword       Ax, Sp      ; recuperar
     Ror-Dword       Out, Sp     ; recuperar
     Ror-Dword       Px, Sp      ; recuperar
-    Jmp-Dword-Clasic Sp         ; retorno
+    jmp              Sp         ; retorno
 
 M3KY1_Hand:
     Lea-Dword       MA3302_KY1_KINDEX ; indice
@@ -796,8 +818,8 @@ M3KY1_Hand:
     Mov-Byte                    ; obtener
     Ror-Byte        Bx, Out     ; obtener byte
 
-    Jmp-Dword-Call KEYB_BUF_FULL ; verificar si esta vacio
-    Jmp-Dword-Zero  INT5_end    ; terminar
+    call           KEYB_BUF_FULL ; verificar si esta vacio
+    jz              INT5_end    ; terminar
 
     Ror-Dword       Cx, KEYB_BUF ; leer el buffer
     Lea-Dword       KEYB_SHEAD  ; obtener
@@ -807,11 +829,11 @@ M3KY1_Hand:
     Add-Dword-Reg-Sp Ax         ; guardar
     Lea-Dword       Out         ; el buffer y indice
     Out-Byte        Bx          ; guardar el indice de caracter
-    Jmp-Dword-Call KEYB_BUF_CALCI ; calcular
+    call           KEYB_BUF_CALCI ; calcular
     Lea-Dword       KEYB_SHEAD  ; direccion
     Out-Byte        Ax          ; guardar resultado
 
-    Jmp-Dword-Clasic INT5_end   ; finalizar
+    jmp              INT5_end   ; finalizar
 
 ; ((scancodeskey_head + 1) % KEYBUF_SIZE) == scancodeskey_tail
 KEYB_BUF_FULL:
@@ -825,7 +847,7 @@ KEYB_BUF_FULL:
     Ror-Byte        Ax, Out     ; guardar
     Push-Byte       Ax          ; para solucionar un bug
     Cmp-Byte-Reg-Sp Al          ; comparaar
-    Jmp-Dword-Clasic Sp         ; retorno
+    jmp              Sp         ; retorno
 
 ; ((scancodeskey_head + 1) % KEYBUF_SIZE)
 KEYB_BUF_CALCI:
@@ -834,7 +856,7 @@ KEYB_BUF_CALCI:
     Add-Byte-Reg-Inm Out, 1     ; añadir 1
     Mod-Byte-Reg-Inm Out, KEYBUF_SIZE ; modular
     Ror-Byte        Ax, Out     ; guardar
-    Jmp-Dword-Clasic Sp         ; retorno
+    jmp              Sp         ; retorno
 
 KEYB_BUF_EMPTY:
     Lea-Dword       KEYB_SHEAD  ; direccion
@@ -844,7 +866,7 @@ KEYB_BUF_EMPTY:
     Mov-Byte                    ; obtener
     Ror-Byte        Al, Out     ; header
     Cmp-Byte-Reg-Reg Ah, Al     ; comparar head con tail
-    Jmp-Dword-Clasic Sp         ; retorno
+    jmp              Sp         ; retorno
 
 
 ; ===========================================
@@ -893,12 +915,19 @@ firmware_on_flag:   Byte 0
 ; ===========================================
 
     Align           64000
-basic_buttons_mmio: Dword 0 ; boton A, B, arriba y abajo
-cassete_mmio:       Byte 0   ; mmio del cassete
-sga_data_mmio:      Byte 0   ; al ultimo de configurar el SGA row y SGA col se pone el color para esto
-sga_row_mmio:       Byte 0   ; posicion y de la SGA
-sga_col_mmio:       Byte 0   ; posicion x de la SGA
-com1_new_mmio:      Byte 0   ; nuevo MMIO del com1
-com1_cmd_mmio:      Byte 0   ; nuevo MMIO del com1
+basic_buttons_mmio: 
+                    Byte 0,0,0,0 ; boton A, B, arriba y abajo
+cassete_mmio:       
+                    Byte 0   ; mmio del cassete
+sga_data_mmio:      
+                    Byte 0   ; al ultimo de configurar el SGA row y SGA col se pone el color para esto
+sga_row_mmio:       
+                    Byte 0   ; posicion y de la SGA
+sga_col_mmio:       
+                    Byte 0   ; posicion x de la SGA
+com1_new_mmio:      
+                    Byte 0   ; nuevo MMIO del com1
+com1_cmd_mmio:      
+                    Byte 0   ; nuevo MMIO del com1
 cassete_sector_read_cmd: Byte 0 ; escribir 2 veces para completar el word
 cassete_selected_mmfs: Byte 0   ; disco seleccionado , start = (fs * 512) + sector

@@ -22,10 +22,10 @@ S1                      Equ 95001       ; zona segura para el stage2
 ; =================== tabla de particion ===================
 _start:
     Jmp-Word-Clasic     _l              ; jump label
-    Assume-Fill         8               ; alinear
-    Assume-Byte         'C','A','S','S','E','T','E','0',' ',' ',' ',' '
-    Assume-Dword        0               ; cantidad de sectores, 0=indefinido
-    Assume-Byte         'F','L','A','T','2',' ',' ',' ' ; nombre del fs
+    Align               8               ; o
+    Byte                'C','A','S','S','E','T','E','0',' ',' ',' ',' '
+    Dword               0               ; cantidad de sectores, 0=indefinido
+    Byte                'F','L','A','T','2',' ',' ',' ' ; nombre del fs
 
 ; =================== codigo fuente ===================
 _l:
@@ -34,7 +34,7 @@ _l:
     Mov                 [Dword mcpy_dst], Dword S1 ; destino
     Mov                 [Dword mcpy_siz], Dword 512 ; tamaño
     Int-Byte            0x13            ; el int
-    Jmp-Dword-Clasic    [C1 In S1] ; saltar
+    jmp                 [C1 In S1] ; saltar
 C1:
     ; imprimir identificador
     Ror-Byte            Ax, 1Eh         ; el servicio
@@ -47,7 +47,7 @@ C1:
     Ror-Byte            Cx, 00h         ; fs
     Ror-Dword           Dx, 024000h     ; memoria
     Int-Byte            12h             ; el int
-    Jmp-Dword-Clasic    024000h         ; sector2
+    jmp                 024000h         ; sector2
     
 msg:
     Assume-Byte         'm','m','f','s','0',0
@@ -61,7 +61,7 @@ msg:
 
     Align               512
 Stage2Sector:
-    Jmp-Dword-Clasic    [024000h Segment Stage2Sector:Stage2Data]
+    jmp                 [024000h Segment Stage2Sector:Stage2Data]
 Stage2Data:
 test:
     Assume-Byte 'm','m','f','s','1',0
@@ -85,13 +85,14 @@ Stage2Code:
 
 LOOP:
     Hlt 
-    Int-Byte            16h             ; la int del teclado
+    Ror-Byte            Ax, 01h         ; funcion del teclado
+    Int-Byte            16h             ; la int misceliana
 
     Ror-Byte            Ax, 0Eh         ; el putchar
     Ror-Byte            Bx, Ah         ; el caracter
     Int-Byte            10h             ; del display
     
-    Jmp-Dword-Clasic    [024000h segment Stage2Sector:LOOP] ; saltar
+    jmp                 [024000h segment Stage2Sector:LOOP] ; saltar
 
 ; =====================================
 ;       SRC/IMG/SPLASHLOGO.FD
