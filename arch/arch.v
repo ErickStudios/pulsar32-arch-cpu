@@ -51,14 +51,15 @@ reg [1:0]           CWFDD;
 reg [1:0]           CWFDM;
 
 // ============== 64 Bit Behavior ==============
-
 reg                 in64Bit;
 reg [63:0]          inms64 [0:15];
 reg [7:0]           selectedinm64;
-reg [63:0]          xsp, x0, x1, x2, x3, x4, x5, x6, x7;
+reg [63:0]          i64a, i64b, i64memre, i64temp, xsp, x0, x1, x2, x3, x4, x5, x6, x7;
 reg [7:0]           i64bytes [0:3];
 reg                 i64pend = 0;
 reg [3:0]           i64inmba = 0;
+reg [3:0]           i64bysiz = 0;
+reg [3:0]           i64opr = 0;
 
 // ============== alu components ==============
 reg  [31:0]         aluA;
@@ -449,6 +450,70 @@ task irq_check; begin
     pc = irq_vector;
 end endtask
 
+task solveReg64bit;
+input [3:0] regCode;
+output [63:0] regVal;
+begin 
+    case (regCode)
+    2: regVal = xsp;
+    3: regVal = x0;
+    4: regVal = x1;
+    5: regVal = x2;
+    6: regVal = x3;
+    7: regVal = x4;
+    8: regVal = x5;
+    9: regVal = x6;
+    endcase
+end endtask
+
+task set64BitReg;
+input [3:0] regCode;
+input [63:0] regVal;
+begin 
+    case (regCode)
+    2: xsp = regVal;
+    3: x0 = regVal;
+    4: x1 = regVal;
+    5: x2 = regVal;
+    6: x3 = regVal;
+    7: x4 = regVal;
+    8: x5 = regVal;
+    9: x6 = regVal;
+    endcase
+end
+endtask
+
+
+function [63:0] readInm64Max; 
+input [7:0] bytesLen; 
+input [63:0] baseAddr; 
+begin
+    case (bytesLen)
+        1: readInm64Max = memory[baseAddr];
+        2: readInm64Max = {
+            memory[baseAddr],
+            memory[baseAddr + 1]
+            };
+        4: readInm64Max = {
+            memory[baseAddr],
+            memory[baseAddr + 1],
+            memory[baseAddr + 2],
+            memory[baseAddr + 3]
+            };
+        8: readInm64Max = {
+            memory[baseAddr],
+            memory[baseAddr + 1],
+            memory[baseAddr + 2],
+            memory[baseAddr + 3],
+            memory[baseAddr + 4],
+            memory[baseAddr + 5],
+            memory[baseAddr + 6],
+            memory[baseAddr + 7]
+            };
+        default: readInm64Max = 0;
+    endcase
+end endfunction
+
 // ============== function for clock ==============
 // | This functions keeps on the machine for make |
 // | it makes things                              |
@@ -516,7 +581,29 @@ always @(posedge clk) begin
             else begin
                 if (!quiet) $write("%d (%8x) ",pc - 4, pc - 4);
                 i64pend <= 0;
-                case (i64bytes[0]) 
+
+                if ((i64bytes[0] & 8'hF0) == 8'h20) begin
+                    i64opr = i64bytes[0][3:0];
+                    case (i64bytes[1][3:2])
+                    0: solveReg64bit(i64bytes[2][3:0], i64a);
+                    1: i64b = inms64[i64bytes[2]];
+                    2: i64b = i64bytes[2];
+                    endcase
+                    case (i64bytes[1][1:0])
+                    0: solveReg64bit(i64bytes[3][3:0], i64b);
+                    1: i64b = inms64[i64bytes[3]];
+                    2: i64b = i64bytes[3];
+                    endcase
+                    $display("OPERATION%0d ((%0d)%0d (%0d)%0d)", i64opr, i64bytes[1][3:2], i64a, i64bytes[1][1:0], i64b); 
+                    case (i64opr)
+                        0: i64temp = i64a + i64b;
+                        1: i64temp = i64a - i64b;
+                        2: i64temp = i64a * i64b;
+                        3: i64temp = i64a / i64b;
+                    endcase
+                    set64BitReg(i64bytes[0][7:4], i64temp);
+                end // operations
+                else begin case (i64bytes[0]) 
                 8'h01: begin
                     if (i64bytes[1] == 8'hFF) begin
                         if (i64bytes[2] == 8'h01) begin
@@ -535,19 +622,49 @@ always @(posedge clk) begin
                         if (!quiet) $write("INM BLD %0d TO %0d [", i64inmba , selectedinm64);
 
                         inms64[selectedinm64] = (
-                            (inms64[selectedinm64] << 7) | i64bytes[2]
+                            (inms64[selectedinm64] << 8) | i64bytes[2]
                         );
                         if (!quiet) $write("%0d",i64bytes[2]);
                         if (i64inmba == 2) begin
                             inms64[selectedinm64] = (
-                                (inms64[selectedinm64] << 7) | i64bytes[3]
+                                (inms64[selectedinm64] << 8) | i64bytes[3]
                             );
                             if (!quiet) $write(",%0d", i64bytes[3]);
                         end // extend to more
                         if (!quiet) $write("]\n");
                     end // add bytes
+                    else if (((i64bytes[1] & 8'hF0) == 8'h40)) begin
+                        if (!quiet) $display("INM LDX %0d FROM %0d", i64bytes[2][3:0] , inms64[i64bytes[3]]);
+                        set64BitReg(i64bytes[2][3:0], inms64[i64bytes[3]]);
+                    end // load to reg
+                    else if (((i64bytes[1] & 8'hF0) == 8'h30)) begin
+                        i64bysiz = i64bytes[1][3:0];
+                        i64opr = i64bytes[2][7:4];
+                        case (i64opr)
+                            0: solveReg64bit(i64bytes[2][3:0], i64temp);
+                            1: i64temp = inms64[i64bytes[2][3:0]];
+                        endcase
+                        inms64[i64bytes[3]] = readInm64Max(i64bysiz, i64temp);
+
+                        if (!quiet) $display("INM LFM STEPS %0d OF %0d TO %0d (%0d)", i64bysiz , i64temp, i64bytes[3], inms64[i64bytes[3]]);
+                    end // load from mem
                 end // inms manager
-                endcase
+                8'h02: begin
+                    if ((i64bytes[1] & 8'hF0) == 8'h10) begin
+                        solveReg64bit(i64bytes[1][3:0], i64memre);
+                        i64bysiz = i64bytes[2][7:4];
+                        i64opr   = i64bytes[2][3:0];
+                        case (i64opr)
+                            0: solveReg64bit(i64bytes[3][3:0], i64temp);
+                            1: i64temp = inms64[i64bytes[3][3:0]];
+                        endcase
+                        if (!quiet) $display("MEM WRT AT %0d STEPS %0d DATA %0d", i64memre ,i64bysiz, i64temp);
+                        for (i = 0; i < i64bysiz; i = i + 1) begin
+                            write_mem_byte(i64memre + i, (i64temp >> (8 * (i64bysiz - 1 - i))) & 8'hFF);
+                        end
+                    end // mem write
+                end // mem manager
+                endcase end // other
             end
 
         end
@@ -583,5 +700,6 @@ always @(posedge clk) begin
     end
     $fflush();
 end
+
 
 endmodule

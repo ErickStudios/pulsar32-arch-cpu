@@ -109,7 +109,6 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
   let i = 0;
   let result = [];
   function peek() {
-    console.log(tokens[i]);
     return tokens[i];
   }
   function fmt7(a) {
@@ -368,6 +367,89 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
         result.push(1, sizeof, parseSymbol(expr.value))
       }
   }
+  function parse64bitReg() {
+    let f3 = fmt7(consume().value);
+    if (f3 === 'SP') return 2;
+    if (f3 === 'R0') return 3;
+    if (f3 === 'R1') return 4;
+    if (f3 === 'R2') return 5;
+    if (f3 === 'R3') return 6;
+    if (f3 === 'R4') return 7;
+    if (f3 === 'R5') return 8;
+    if (f3 === 'R6') return 8;
+    return 0;
+  }
+  function parse64bitExpr() {
+    if (typeof peek().value === 'number') {
+      return { t:'n', n:consume().value };
+    }
+    if (peek7() == 'I') {
+      consume();
+      expect('(');
+      let a = parseIdent(parsePrimary().value);
+      expect(')');
+      return { t:'i', i:a };
+    }
+    return { t:'s', s:parse64bitReg() };
+  }
+  function parseInmFromMem(sizeof) {
+    // (01 OS TA [To])
+    consume();
+    result.push(1);
+    result.push(0x30 | sizeof);
+    let ab = parseIdent(parsePrimary().value);
+    expect(',');
+    let expr = parse64bitExpr();
+    if (expr.t === 's') {
+      result.push(0 | expr.s);
+    }
+    else if (expr.t === 'i') {
+      result.push(0x10 | expr.i);
+    }
+    result.push(ab);
+  }
+  function parse64bitOperation(op,sizeof) {
+    // R(M1 M2) X1 X2
+    consume();
+    result.push(0x20 | op);
+    let rega = parse64bitReg();
+    expect(",")
+    let expr1 = parse64bitExpr();
+    expect(",")
+    let expr2 = parse64bitExpr();
+
+    let expr1n = [0, 0];
+    let expr2n = [0, 0];
+
+    let x = (a, b) => {
+      if (a.t === 's') { b[0] = 0; b[1] = a.s; }
+      else if (a.t === 'i') { b[0] = 1; b[1] = a.i; }
+      else if (a.t === 'n') { b[0] = 2; b[1] = a.n; }
+    }
+    x(expr1, expr1n);
+    x(expr2, expr2n);
+
+    console.log(expr1n, expr2n)
+
+    let nib = (expr1n[0] << 2) | expr2n[0];
+    let coda = (rega << 4) | nib;
+    result.push(coda, expr1n[1], expr2n[1]);
+  }
+  function parseMemWrite(sizeof) {
+    // [OP] MA ST [DT] 
+    // (M)A, T(DT)
+    result.push(2);
+    consume();
+    result.push(0x10 | parse64bitReg());
+    expect(",");
+    let expr = parse64bitExpr();
+    if (expr.t === 's') {
+      result.push((sizeof << 4) | 0, expr.s);
+    }
+    else if (expr.t === 'i') {
+      result.push((sizeof << 4) | 1, expr.i);
+    }
+  }
   function parseLoadAddr(sizeof) {
       consume();
       let dir = parseIdent(parsePrimary().value);
@@ -430,6 +512,21 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
       consume(); 
       result.push(1, 0xFF, 0xFF, 1);
     }
+    else if (ctx.in64 && peek7() === 'MWR8') parseMemWrite(1);
+    else if (ctx.in64 && peek7() === 'MWR16') parseMemWrite(2);
+    else if (ctx.in64 && peek7() === 'MWR32') parseMemWrite(4);
+    else if (ctx.in64 && peek7() === 'MWR64') parseMemWrite(8);
+    
+    else if (ctx.in64 && peek7() === 'IFM8') parseInmFromMem(1);
+    else if (ctx.in64 && peek7() === 'IFM16') parseInmFromMem(2);
+    else if (ctx.in64 && peek7() === 'IFM32') parseInmFromMem(4);
+    else if (ctx.in64 && peek7() === 'IFM64') parseInmFromMem(8);
+
+    else if (ctx.in64 && peek7() === 'ADD') parse64bitOperation(0);
+    else if (ctx.in64 && peek7() === 'SUB') parse64bitOperation(1);
+    else if (ctx.in64 && peek7() === 'MUL') parse64bitOperation(2);
+    else if (ctx.in64 && peek7() === 'DIV') parse64bitOperation(3);
+
     else if (ctx.in64 && peek7() === 'ADDINMB2') {
       consume(); 
       result.push(
@@ -442,7 +539,7 @@ export function AssembleLineWithoutContext(line, ctx, len=null) {
       consume(); 
       result.push(
         1, 0x40, 
-        ([consume(), expect(',')])[0], 
+        ([parse64bitReg(), expect(',')])[0], 
         parseIdent(parsePrimary().value)
       );
     }
