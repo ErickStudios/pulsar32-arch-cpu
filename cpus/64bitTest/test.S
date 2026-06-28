@@ -83,7 +83,7 @@ InterruptionsTable:
     Align       16
 LevelsSettings:
     Qword       00h, 0FFFFFFFFH ; IOM + PRIVS (kernel)
-    Qword       01h, 0FFFFFFFBH ; IOM + PRIVS (user)
+    Qword       01h, 0FFFFFFF3H ; IOM + PRIVS (user)
 
     Align       16
 MemoryRegionsTable:
@@ -93,9 +93,6 @@ MemoryRegionsTable:
 
 ProgramsSafeZone:
 user_load:
-    li64        r0, 0
-    mwr64       r0, r0      ; poner en el stack
-
     Align 512 Byte  0
     Align 512 Byte  0
     Align 512 Byte  0

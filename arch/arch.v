@@ -531,6 +531,42 @@ begin
     endcase
 end endfunction
 
+task readInm64MaxNonRoot; 
+input [7:0] bytesLen; 
+input [63:0] baseAddr; 
+output [63:0] result;
+begin
+    if (!checIfMemkBoundles64Exepction(baseAddr,1) && !checIfMemkBoundles64Exepction(baseAddr + bytesLen,1)) begin
+        case (bytesLen)
+            1: result = memory[baseAddr];
+            2: result = {
+                memory[baseAddr],
+                memory[baseAddr + 1]
+                };
+            4: result = {
+                memory[baseAddr],
+                memory[baseAddr + 1],
+                memory[baseAddr + 2],
+                memory[baseAddr + 3]
+                };
+            8: result = {
+                memory[baseAddr],
+                memory[baseAddr + 1],
+                memory[baseAddr + 2],
+                memory[baseAddr + 3],
+                memory[baseAddr + 4],
+                memory[baseAddr + 5],
+                memory[baseAddr + 6],
+                memory[baseAddr + 7]
+                };
+            default: result = 0;
+        endcase
+    end
+    else begin
+        irqJmp64(32'h00000000); // segmentation fault
+    end
+end endtask
+
 localparam CpuIntDescIInTbl = 0;
 localparam CpuLvlSetsIInTbl = 1;
 localparam CpuIOMIInTbl     = 2;
@@ -884,7 +920,7 @@ always @(posedge clk) begin
                             0: solveReg64bit(i64bytes[2][3:0], i64temp);
                             1: i64temp = inms64[i64bytes[2][3:0]];
                         endcase
-                        inms64[i64bytes[3]] = readInm64Max(i64bysiz, i64temp);
+                        readInm64MaxNonRoot(i64bysiz, i64temp, inms64[i64bytes[3]]);
 
                         if (!quiet) $display("INM LFM STEPS %0d OF %0d TO %0d (%0d)", i64bysiz , i64temp, i64bytes[3], inms64[i64bytes[3]]);
                     end // load from mem
